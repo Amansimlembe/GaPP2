@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, WebSocket, Depends, UploadFile, File
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.middleware.cors import CORSMiddleware  # Added for CORS
 from pymongo import MongoClient
 from pydantic import BaseModel
 import datetime
@@ -11,7 +12,20 @@ import uvicorn
 
 app = FastAPI()
 
-# MongoDB Atlas Connection with your password
+# Add CORS middleware to allow requests from localhost and Vercel
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:8080",          # Local testing
+        "https://ga-pp-2.vercel.app",     # Vercel production
+        "https://ga-pp-2-amansimlembes-projects.vercel.app"  # Additional Vercel domain
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# MongoDB Atlas Connection
 MONGO_URI = "mongodb+srv://GaPP:Ammy%40123@cluster0.mv3zr.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 client = MongoClient(MONGO_URI)
 db = client["jobseeker_app"]
