@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pymongo import MongoClient
 from pydantic import BaseModel
 import datetime
-import jwt
+from jose import jwt  # Changed from 'import jwt' to 'from jose import jwt'
 import os
 from passlib.context import CryptContext
 from typing import Dict
@@ -71,11 +71,11 @@ def get_password_hash(password):
     return pwd_context.hash(password)
 
 def create_access_token(data: dict):
-    return jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)  # Still 'jwt.encode'
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])  # Still 'jwt.decode'
         user_id = payload.get("sub")
         user = users_collection.find_one({"_id": user_id})
         if not user:
