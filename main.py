@@ -217,6 +217,5 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
     return chat_list
 
 if __name__ == "__main__":
-    # Use dynamic port for Render, default to 8000 locally
     port = int(os.getenv("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
