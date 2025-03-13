@@ -12,13 +12,12 @@ import uvicorn
 
 app = FastAPI()
 
-# Add CORS middleware to allow requests from localhost and Vercel
-app.add_middleware(
+# Add CORS middleware to allow requests from localhost and Vercelapp.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:8080",          # Local testing
-        "https://ga-pp-2.vercel.app",     # Vercel production
-        "https://ga-pp-2-amansimlembes-projects.vercel.app"  # Additional Vercel domain
+        "http://localhost:8080",
+        "https://ga-pp-2.vercel.app",
+        "https://ga-pp-2-amansimlembes-projects.vercel.app"
     ],
     allow_credentials=True,
     allow_methods=["*"],
