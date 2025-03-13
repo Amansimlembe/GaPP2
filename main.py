@@ -2,9 +2,9 @@ from fastapi import FastAPI, HTTPException, WebSocket, Depends, UploadFile, File
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from pymongo import MongoClient
-from pydantic import BaseModel
+from pydantic import BaseModel, Optional
 import datetime
-from jose import jwt  # Fixed import
+from jose import jwt
 import os
 from passlib.context import CryptContext
 from typing import Dict
@@ -46,22 +46,41 @@ class User(BaseModel):
     email: str
     phone_number: str
     password: str
-    role: int  # 0 = Job Seeker, 1 = Employer
-
-class Message(BaseModel):
-    sender_id: str
-    recipient_id: str
-    content: str
-    timestamp: datetime.datetime
+    role: int
+    created_at: datetime.datetime = datetime.datetime.utcnow()
 
 class Job(BaseModel):
-    user_id: str
+    user_id: int
     title: str
     description: str
     requirements: str
     deadline: str
     employer_email: str
-    company_name: str = None
+    company_name: Optional[str] = None
+    status: str = "active"
+    created_at: datetime.datetime = datetime.datetime.utcnow()
+
+class JobSeeker(BaseModel):
+    user_id: int
+    email: str
+    cv_path: Optional[str] = None
+    po_box: Optional[str] = None
+    location: Optional[str] = None
+    skills: Optional[str] = None
+    experience: Optional[str] = None
+
+class JobApplication(BaseModel):
+    job_id: int
+    user_id: int
+    applied_at: datetime.datetime = datetime.datetime.utcnow()
+
+class Message(BaseModel):
+    sender_id: int
+    recipient_id: int
+    message_type: str = "text"
+    content: str
+    sent_at: datetime.datetime = datetime.datetime.utcnow()
+    read_at: Optional[datetime.datetime] = None
 
 # Authentication
 def verify_password(plain_password, hashed_password):
@@ -76,7 +95,7 @@ def create_access_token(data: dict):
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id = payload.get("sub")
+        user_id = int(payload.get("sub"))
         user = users_collection.find_one({"_id": user_id})
         if not user:
             raise HTTPException(status_code=401, detail="Invalid token")
@@ -85,10 +104,10 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         raise HTTPException(status_code=401, detail="Invalid token")
 
 # WebSocket Connections
-active_connections: Dict[str, WebSocket] = {}
+active_connections: Dict[int, WebSocket] = {}
 
 @app.websocket("/ws/{user_id}")
-async def websocket_endpoint(websocket: WebSocket, user_id: str):
+async def websocket_endpoint(websocket: WebSocket, user_id: int):
     await websocket.accept()
     active_connections[user_id] = websocket
     print(f"User {user_id} connected")
@@ -98,9 +117,11 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             data = await websocket.receive_json()
             message = {
                 "sender_id": user_id,
-                "recipient_id": data["recipient_id"],
+                "recipient_id": int(data["recipient_id"]),
+                "message_type": data.get("message_type", "text"),
                 "content": data["content"],
-                "timestamp": datetime.datetime.utcnow()
+                "sent_at": datetime.datetime.utcnow(),
+                "read_at": None
             }
             messages_collection.insert_one(message)
 
@@ -108,7 +129,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             if user_id in active_connections:
                 await active_connections[user_id].send_json(message)
             if data["recipient_id"] in active_connections:
-                await active_connections[data["recipient_id"]].send_json(message)
+                await active_connections[int(data["recipient_id"])].send_json(message)
 
     except Exception as e:
         print(f"WebSocket error: {e}")
@@ -125,11 +146,12 @@ async def register(user: User):
     hashed_password = get_password_hash(user.password)
     user_dict = user.dict()
     user_dict["password"] = hashed_password
-    user_dict["_id"] = str(users_collection.count_documents({}) + 1)
+    last_user = users_collection.find_one(sort=[("_id", -1)])
+    user_dict["_id"] = (last_user["_id"] + 1) if last_user else 1
     users_collection.insert_one(user_dict)
     if user.role == 0:
         jobseekers_collection.insert_one({"_id": user_dict["_id"], "email": user.email})
-    token = create_access_token({"sub": user_dict["_id"]})
+    token = create_access_token({"sub": str(user_dict["_id"])})
     return {"access_token": token, "token_type": "bearer", "role": user.role}
 
 @app.post("/token")
@@ -137,7 +159,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     user = users_collection.find_one({"$or": [{"email": form_data.username}, {"phone_number": form_data.username}]})
     if not user or not verify_password(form_data.password, user["password"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    token = create_access_token({"sub": user["_id"]})
+    token = create_access_token({"sub": str(user["_id"])})
     return {"access_token": token, "token_type": "bearer", "role": user["role"]}
 
 @app.get("/employer/dashboard")
@@ -157,8 +179,8 @@ async def post_job(job: Job, current_user: dict = Depends(get_current_user)):
     if current_user["role"] != 1:
         raise HTTPException(status_code=403, detail="Not authorized")
     job_dict = job.dict()
-    job_dict["_id"] = str(jobs_collection.count_documents({}) + 1)
-    job_dict["user_id"] = current_user["_id"]
+    last_job = jobs_collection.find_one(sort=[("_id", -1)])
+    job_dict["_id"] = (last_job["_id"] + 1) if last_job else 1
     jobs_collection.insert_one(job_dict)
     return {"message": "Job posted successfully"}
 
@@ -166,11 +188,11 @@ async def post_job(job: Job, current_user: dict = Depends(get_current_user)):
 async def jobseeker_dashboard(current_user: dict = Depends(get_current_user)):
     if current_user["role"] != 0:
         raise HTTPException(status_code=403, detail="Not authorized")
-    jobs = list(jobs_collection.find({"status": {"$exists": False}}))  # Default to active if status not set
+    jobs = list(jobs_collection.find({"status": "active"}))
     return {"user_id": current_user["_id"], "jobs": jobs}
 
 @app.post("/jobseeker/update_cv")
-async def update_cv(email: str, po_box: str = None, location: str = None, cv: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+async def update_cv(email: str, po_box: Optional[str] = None, location: Optional[str] = None, skills: Optional[str] = None, experience: Optional[str] = None, cv: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
     if current_user["role"] != 0:
         raise HTTPException(status_code=403, detail="Not authorized")
     cv_path = f"uploads/cv_{current_user['_id']}.pdf"
@@ -179,19 +201,31 @@ async def update_cv(email: str, po_box: str = None, location: str = None, cv: Up
         f.write(await cv.read())
     jobseekers_collection.update_one(
         {"_id": current_user["_id"]},
-        {"$set": {"email": email, "cv_path": cv_path, "po_box": po_box, "location": location}},
+        {"$set": {"email": email, "cv_path": cv_path, "po_box": po_box, "location": location, "skills": skills, "experience": experience}},
         upsert=True
     )
     return {"message": "CV updated successfully"}
 
+@app.post("/jobseeker/apply")
+async def apply_for_job(job_id: int, current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != 0:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if job_applications_collection.find_one({"job_id": job_id, "user_id": current_user["_id"]}):
+        raise HTTPException(status_code=400, detail="Already applied")
+    last_app = job_applications_collection.find_one(sort=[("_id", -1)])
+    app_dict = {"job_id": job_id, "user_id": current_user["_id"], "applied_at": datetime.datetime.utcnow()}
+    app_dict["_id"] = (last_app["_id"] + 1) if last_app else 1
+    job_applications_collection.insert_one(app_dict)
+    return {"message": "Application submitted"}
+
 @app.get("/messages/{recipient_id}")
-async def get_messages(recipient_id: str, current_user: dict = Depends(get_current_user)):
+async def get_messages(recipient_id: int, current_user: dict = Depends(get_current_user)):
     messages = list(messages_collection.find({
         "$or": [
             {"sender_id": current_user["_id"], "recipient_id": recipient_id},
             {"sender_id": recipient_id, "recipient_id": current_user["_id"]}
         ]
-    }).sort("timestamp", 1))
+    }).sort("sent_at", 1))
     return messages
 
 @app.get("/chat_list")
@@ -200,7 +234,7 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
         {"$match": {"$or": [{"sender_id": current_user["_id"]}, {"recipient_id": current_user["_id"]}]}},
         {"$group": {
             "_id": {"$cond": [{"$eq": ["$sender_id", current_user["_id"]]}, "$recipient_id", "$sender_id"]},
-            "last_message": {"$max": "$timestamp"},
+            "last_message": {"$max": "$sent_at"},
             "unread": {"$sum": {"$cond": [{"$and": [{"$eq": ["$recipient_id", current_user["_id"]]}, {"$eq": ["$read_at", None]}]}, 1, 0]}}
         }},
         {"$lookup": {"from": "users", "localField": "_id", "foreignField": "_id", "as": "user"}},

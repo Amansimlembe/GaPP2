@@ -1,19 +1,17 @@
-# GaPP2 - Job Seeker & Employer Platform
+# GaPP2
+A job seeker and employer platform built with FastAPI and MongoDB.
 
-GaPP2 is a web application connecting job seekers and employers with real-time messaging and job posting features. Built with FastAPI, WebSockets, and MongoDB Atlas, it’s deployed for free using Render (backend) and Vercel (frontend).
+## Setup
+1. Clone the repo: `git clone https://github.com/Amansimlembe/GaPP2.git`
+2. Install dependencies: `pip install -r requirements.txt`
+3. Run locally: `uvicorn main:app --host 0.0.0.0 --port 8000`
+4. Serve frontend: `cd static && python -m http.server 8080`
+
+## Deployment
+- **Backend**: Deployed on Render (`https://gapp2-znqj.onrender.com`)
+- **Frontend**: Deployed on Vercel (`https://ga-pp-2.vercel.app`)
 
 ## Features
-- User registration/login (Job Seekers & Employers)
-- Job posting and CV upload
-- Real-time messaging with persistent chat lists
-- Free deployment with MongoDB Atlas (512MB free tier)
-
-## Tech Stack
-- **Backend**: FastAPI, WebSockets, MongoDB Atlas
-- **Frontend**: HTML, Bootstrap, JavaScript
-- **Deployment**: Render (backend), Vercel (frontend)
-
-## Setup Locally
-1. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
+- User registration and login
+- Job posting and applications
+- Real-time messaging via WebSocket

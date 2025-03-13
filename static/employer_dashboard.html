@@ -3,128 +3,84 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GaPP Employer Dashboard</title>
+    <title>Employer Dashboard - GaPP2</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="icon" href="/favicon.ico" type="image/x-icon"> <!-- Optional favicon -->
-    <style>
-        body { background: #f4f7fa; font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 0; }
-        .navbar { background: #2c3e50; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        .navbar-brand { color: #fff; font-weight: 700; }
-        .container { max-width: 1200px; margin: 30px auto; }
-        .card { border: none; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 20px; padding: 20px; }
-        .card h2 { color: #2c3e50; font-weight: 600; }
-        .btn-primary { background: #007bff; border: none; }
-        .btn-primary:hover { background: #0056b3; }
-        .chat-container { display: flex; height: 500px; }
-        .chat-list { width: 30%; background: #fff; border-radius: 10px; overflow-y: auto; padding: 15px; box-shadow: 0 1px 5px rgba(0,0,0,0.05); }
-        .chat-user { padding: 10px; border-bottom: 1px solid #eee; cursor: pointer; position: relative; }
-        .chat-user:hover { background: #f8f9fa; }
-        .chat-user.unread::after { content: '●'; color: #28a745; position: absolute; right: 10px; }
-        .chat-user.active { background: #d3e0ea; font-weight: bold; }
-        .chat-box { width: 70%; background: #fff; border-radius: 10px; padding: 15px; box-shadow: 0 1px 5px rgba(0,0,0,0.05); display: flex; flex-direction: column; }
-        .messages { flex-grow: 1; max-height: 400px; overflow-y: auto; }
-        .message { margin-bottom: 15px; padding: 10px 15px; border-radius: 15px; max-width: 70%; position: relative; }
-        .message-sent { background: #007bff; color: #fff; margin-left: auto; }
-        .message-received { background: #e9ecef; color: #333; margin-right: auto; }
-        .timestamp { font-size: 0.8em; color: #666; }
-    </style>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="#">GaPP Employer</a>
-            <button class="btn btn-outline-light ms-auto" onclick="logout()">Logout</button>
-        </div>
-    </nav>
+    <div class="container mt-5">
+        <h2>Employer Dashboard</h2>
+        <button class="btn btn-danger mb-3" onclick="logout()">Logout</button>
 
-    <div class="container">
-        <div class="card">
-            <h2>Post a Job</h2>
-            <form id="jobForm">
-                <div class="mb-3"><input type="text" class="form-control" id="title" placeholder="Job Title" required></div>
-                <div class="mb-3"><textarea class="form-control" id="description" rows="3" placeholder="Description" required></textarea></div>
-                <div class="mb-3"><textarea class="form-control" id="requirements" rows="3" placeholder="Requirements" required></textarea></div>
-                <div class="mb-3"><input type="date" class="form-control" id="deadline" required></div>
-                <div class="mb-3"><input type="email" class="form-control" id="employer_email" placeholder="Employer Email" required></div>
-                <div class="mb-3"><input type="text" class="form-control" id="company_name" placeholder="Company Name"></div>
-                <button type="submit" class="btn btn-primary">Post Job</button>
-            </form>
-        </div>
-
-        <div class="card" id="jobsCard"></div>
-        <div class="card" id="applicationsCard"></div>
-
-        <div class="card">
-            <h2>Messages</h2>
-            <div class="chat-container">
-                <div class="chat-list" id="chatList"></div>
-                <div class="chat-box">
-                    <div class="messages" id="chatBox"></div>
-                    <form id="messageForm" class="mt-3">
-                        <input type="hidden" id="recipientId" value="">
-                        <div class="input-group">
-                            <textarea class="form-control" id="messageInput" rows="2" placeholder="Type a message..." disabled></textarea>
-                            <button type="submit" class="btn btn-primary" disabled>Send</button>
-                        </div>
-                    </form>
-                </div>
+        <h3>Post a Job</h3>
+        <form id="jobForm" class="mb-4">
+            <div class="mb-3">
+                <label for="title" class="form-label">Title</label>
+                <input type="text" class="form-control" id="title" required>
             </div>
-        </div>
+            <div class="mb-3">
+                <label for="description" class="form-label">Description</label>
+                <textarea class="form-control" id="description" required></textarea>
+            </div>
+            <div class="mb-3">
+                <label for="requirements" class="form-label">Requirements</label>
+                <textarea class="form-control" id="requirements" required></textarea>
+            </div>
+            <div class="mb-3">
+                <label for="deadline" class="form-label">Deadline</label>
+                <input type="date" class="form-control" id="deadline" required>
+            </div>
+            <div class="mb-3">
+                <label for="employer_email" class="form-label">Email</label>
+                <input type="email" class="form-control" id="employer_email" required>
+            </div>
+            <div class="mb-3">
+                <label for="company_name" class="form-label">Company Name</label>
+                <input type="text" class="form-control" id="company_name">
+            </div>
+            <button type="submit" class="btn btn-primary">Post Job</button>
+        </form>
+
+        <h3>Your Jobs</h3>
+        <div id="jobList" class="mb-4"></div>
+
+        <h3>Applications</h3>
+        <div id="applications" class="mb-4"></div>
     </div>
 
     <script>
-        let userId = null;
-        let token = null;
-        let currentRecipientId = null;
-        let socket = null;
+        const token = localStorage.getItem('token');
 
-        document.addEventListener('DOMContentLoaded', async () => {
-            token = localStorage.getItem('token');
-            if (!token) window.location.href = '/login.html';
+        async function loadDashboard() {
             const response = await fetch('https://gapp2-znqj.onrender.com/employer/dashboard', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            if (response.status === 401) window.location.href = '/login.html';
             const data = await response.json();
-            userId = data.user_id;
+            if (!response.ok) throw new Error(data.detail || 'Failed to load dashboard');
 
-            // Initialize WebSocket with Render URL
-            socket = new WebSocket(`wss://gapp2-znqj.onrender.com/ws/${userId}`);
-            socket.onopen = () => console.log(`Connected to WebSocket as ${userId}`);
-            socket.onmessage = (event) => {
-                const message = JSON.parse(event.data);
-                if (message.sender_id === userId || message.recipient_id === userId) {
-                    if (currentRecipientId && (message.sender_id === currentRecipientId || message.recipient_id === currentRecipientId)) {
-                        appendMessage(message);
-                    }
-                    updateChatList();
-                }
-            };
+            document.getElementById('jobList').innerHTML = data.jobs.map(job => `
+                <div class="card mb-2">
+                    <div class="card-body">
+                        <h5 class="card-title">${job.title}</h5>
+                        <p class="card-text">${job.description}</p>
+                    </div>
+                </div>
+            `).join('');
 
-            // Load initial data
-            loadDashboard(data);
-            updateChatList();
-
-            // Event Listeners
-            document.getElementById('jobForm').addEventListener('submit', postJob);
-            document.getElementById('messageForm').addEventListener('submit', sendMessage);
-            document.getElementById('chatList').addEventListener('click', openChat);
-        });
-
-        function loadDashboard(data) {
-            const jobsCard = document.getElementById('jobsCard');
-            jobsCard.innerHTML = '<h2>Your Jobs</h2>' + data.jobs.map(job => 
-                `<p>${job.title} - Deadline: ${job.deadline}</p>`).join('');
-
-            const applicationsCard = document.getElementById('applicationsCard');
-            applicationsCard.innerHTML = '<h2>Matched Applicants</h2>' + data.applications.map(app => 
-                `<p>${app.jobseeker[0].email} - <button class="btn btn-sm btn-primary chat-btn" data-user-id="${app.user_id}">Chat</button></p>`).join('');
-            document.querySelectorAll('.chat-btn').forEach(btn => btn.addEventListener('click', () => openChat({ target: btn })));
+            document.getElementById('applications').innerHTML = data.applications.map(app => `
+                <div class="card mb-2">
+                    <div class="card-body">
+                        <h5 class="card-title">${app.job[0]?.title || 'Unknown Job'}</h5>
+                        <p class="card-text">Applicant: ${app.jobseeker[0]?.email || 'Unknown'}</p>
+                    </div>
+                </div>
+            `).join('');
         }
 
-        async function postJob(e) {
+        document.getElementById('jobForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const job = {
+                user_id: parseInt(localStorage.getItem('userId')),
                 title: document.getElementById('title').value,
                 description: document.getElementById('description').value,
                 requirements: document.getElementById('requirements').value,
@@ -132,60 +88,30 @@
                 employer_email: document.getElementById('employer_email').value,
                 company_name: document.getElementById('company_name').value
             };
-            await fetch('https://gapp2-znqj.onrender.com/employer/post_job', {
+
+            const response = await fetch('https://gapp2-znqj.onrender.com/employer/post_job', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify(job)
             });
-            window.location.reload();
-        }
-
-        function appendMessage(msg) {
-            const chatBox = document.getElementById('chatBox');
-            const div = document.createElement('div');
-            div.className = `message ${msg.sender_id === userId ? 'message-sent' : 'message-received'}`;
-            div.innerHTML = `<p>${msg.content}</p><span class="timestamp">${new Date(msg.timestamp).toLocaleString()}</span>`;
-            chatBox.appendChild(div);
-            chatBox.scrollTop = chatBox.scrollHeight;
-        }
-
-        async function openChat(e) {
-            currentRecipientId = e.target.dataset.userId;
-            document.getElementById('recipientId').value = currentRecipientId;
-            document.getElementById('chatBox').innerHTML = '';
-            document.getElementById('messageInput').disabled = false;
-            document.getElementById('messageForm').querySelector('button').disabled = false;
-            const messages = await (await fetch(`https://gapp2-znqj.onrender.com/messages/${currentRecipientId}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            })).json();
-            messages.forEach(appendMessage);
-            updateChatList();
-        }
-
-        async function updateChatList() {
-            const chatList = document.getElementById('chatList');
-            const users = await (await fetch('https://gapp2-znqj.onrender.com/chat_list', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            })).json();
-            chatList.innerHTML = users.map(user => 
-                `<div class="chat-user ${user.unread > 0 ? 'unread' : ''} ${user.user_id === currentRecipientId ? 'active' : ''}" data-user-id="${user.user_id}">
-                    ${user.email}${user.company_name ? ` (${user.company_name})` : ''}
-                </div>`).join('');
-        }
-
-        function sendMessage(e) {
-            e.preventDefault();
-            const content = document.getElementById('messageInput').value.trim();
-            if (content && currentRecipientId) {
-                socket.send(JSON.stringify({ recipient_id: currentRecipientId, content }));
-                document.getElementById('messageInput').value = '';
+            const data = await response.json();
+            if (response.ok) {
+                alert(data.message);
+                loadDashboard();
+            } else {
+                alert(data.detail || 'Failed to post job');
             }
-        }
+        });
 
         function logout() {
             localStorage.removeItem('token');
-            window.location.href = '/login.html';
+            window.location.href = 'login.html';
         }
+
+        window.onload = () => {
+            if (!token) window.location.href = 'login.html';
+            else loadDashboard().catch(err => alert(err.message));
+        };
     </script>
 </body>
 </html>

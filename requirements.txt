@@ -1,6 +1,6 @@
 fastapi
 uvicorn
-pymongo[srv]==4.6.2
+pymongo[srv]==3.12
 python-jose[cryptography]
 passlib[bcrypt]
 python-multipart
