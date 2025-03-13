@@ -1,6 +1,6 @@
 fastapi
 uvicorn
-pymongo[srv]>=4.6.2  # Latest as of March 2025
+pymongo[srv]==4.6.2
 python-jose[cryptography]
 passlib[bcrypt]
 python-multipart
