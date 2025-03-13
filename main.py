@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, WebSocket, Depends, UploadFile, File
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from fastapi.middleware.cors import CORSMiddleware  # Added for CORS
+from fastapi.middleware.cors import CORSMiddleware
 from pymongo import MongoClient
 from pydantic import BaseModel
 import datetime
@@ -12,7 +12,8 @@ import uvicorn
 
 app = FastAPI()
 
-# Add CORS middleware to allow requests from localhost and Vercelapp.add_middleware(
+# Add CORS middleware
+app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:8080",
