@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pymongo import MongoClient
 from pydantic import BaseModel
 import datetime
-from jose import jwt  # Must be 'from jose import jwt'
+from jose import jwt  # Fixed import
 import os
 from passlib.context import CryptContext
 from typing import Dict
@@ -71,11 +71,11 @@ def get_password_hash(password):
     return pwd_context.hash(password)
 
 def create_access_token(data: dict):
-    return jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)  # Still 'jwt.encode'
+    return jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])  # Still 'jwt.decode'
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = payload.get("sub")
         user = users_collection.find_one({"_id": user_id})
         if not user:
@@ -215,7 +215,8 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
     ]
     chat_list = list(messages_collection.aggregate(pipeline))
     return chat_list
-# At the bottom of main.py
+
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8000))  # Use Render's $PORT or default to 8000
+    # Use dynamic port for Render, default to 8000 locally
+    port = int(os.getenv("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
