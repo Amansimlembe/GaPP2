@@ -215,6 +215,7 @@ async def get_chat_list(current_user: dict = Depends(get_current_user)):
     ]
     chat_list = list(messages_collection.aggregate(pipeline))
     return chat_list
-
+# At the bottom of main.py
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.getenv("PORT", 8000))  # Use Render's $PORT or default to 8000
+    uvicorn.run(app, host="0.0.0.0", port=port)
