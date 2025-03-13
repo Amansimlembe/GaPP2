@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pymongo import MongoClient
 from pydantic import BaseModel
 import datetime
-from jose import jwt  # Changed from 'import jwt' to 'from jose import jwt'
+from jose import jwt  # Must be 'from jose import jwt'
 import os
 from passlib.context import CryptContext
 from typing import Dict
