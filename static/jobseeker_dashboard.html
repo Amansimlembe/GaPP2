@@ -29,16 +29,18 @@
 
     <script>
         const token = localStorage.getItem('token');
+        const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:8000' : 'https://gapp2-znqj.onrender.com';
         let socket;
 
         async function loadDashboard() {
-            const response = await fetch('https://gapp2-znqj.onrender.com/jobseeker/dashboard', {
+            const response = await fetch(`${baseUrl}/jobseeker/dashboard`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const data = await response.json();
             if (!response.ok) throw new Error(data.detail || 'Failed to load dashboard');
 
             const userId = data.user_id;
+            localStorage.setItem('userId', userId);
             document.getElementById('jobList').innerHTML = data.jobs.map(job => `
                 <div class="card mb-2">
                     <div class="card-body">
@@ -49,8 +51,8 @@
                 </div>
             `).join('');
 
-            // Initialize WebSocket
-            socket = new WebSocket(`wss://gapp2-znqj.onrender.com/ws/${userId}`);
+            const wsUrl = window.location.hostname === 'localhost' ? `ws://localhost:8000/ws/${userId}` : `wss://gapp2-znqj.onrender.com/ws/${userId}`;
+            socket = new WebSocket(wsUrl);
             socket.onopen = () => console.log(`Connected to WebSocket as ${userId}`);
             socket.onmessage = (event) => {
                 const message = JSON.parse(event.data);
@@ -59,12 +61,11 @@
             socket.onerror = (error) => console.error('WebSocket error:', error);
             socket.onclose = () => console.log('WebSocket closed');
 
-            // Load chat list
             loadChatList(userId);
         }
 
         async function loadChatList(userId) {
-            const response = await fetch('https://gapp2-znqj.onrender.com/chat_list', {
+            const response = await fetch(`${baseUrl}/chat_list`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const chatList = await response.json();
@@ -75,7 +76,7 @@
 
         async function loadMessages(recipientId) {
             document.getElementById('recipientId').value = recipientId;
-            const response = await fetch(`https://gapp2-znqj.onrender.com/messages/${recipientId}`, {
+            const response = await fetch(`${baseUrl}/messages/${recipientId}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const messages = await response.json();
@@ -101,7 +102,7 @@
         });
 
         async function applyForJob(jobId) {
-            const response = await fetch('https://gapp2-znqj.onrender.com/jobseeker/apply', {
+            const response = await fetch(`${baseUrl}/jobseeker/apply`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ job_id: jobId })
@@ -112,6 +113,7 @@
 
         function logout() {
             localStorage.removeItem('token');
+            localStorage.removeItem('userId');
             window.location.href = 'login.html';
         }
 

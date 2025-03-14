@@ -2,17 +2,20 @@ from fastapi import FastAPI, HTTPException, WebSocket, Depends, UploadFile, File
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from pymongo import MongoClient
-from pydantic import BaseModel, Optional
+from pydantic import BaseModel
+from typing import Optional, Dict
 import datetime
 from jose import jwt
 import os
 from passlib.context import CryptContext
-from typing import Dict
 import uvicorn
+from dotenv import load_dotenv
+
+load_dotenv()  # Load environment variables
 
 app = FastAPI()
 
-# Add CORS middleware
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -27,8 +30,13 @@ app.add_middleware(
 
 # MongoDB Atlas Connection
 MONGO_URI = "mongodb+srv://GaPP:Ammy%40123@cluster0.mv3zr.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
-client = MongoClient(MONGO_URI)
-db = client["jobseeker_app"]
+try:
+    client = MongoClient(MONGO_URI)
+    db = client["jobseeker_app"]
+    client.admin.command('ping')  # Test connection
+except Exception as e:
+    raise Exception(f"MongoDB connection failed: {e}")
+
 users_collection = db["users"]
 messages_collection = db["messages"]
 jobs_collection = db["jobs"]
@@ -36,7 +44,7 @@ jobseekers_collection = db["jobseekers"]
 job_applications_collection = db["job_applications"]
 
 # Security
-SECRET_KEY = "your-secret-key"  # Change this in production
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key")  # Use env var in production
 ALGORITHM = "HS256"
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -47,7 +55,7 @@ class User(BaseModel):
     phone_number: str
     password: str
     role: int
-    created_at: datetime.datetime = datetime.datetime.utcnow()
+    created_at: datetime.datetime = datetime.datetime.now(datetime.timezone.utc)
 
 class Job(BaseModel):
     user_id: int
@@ -58,7 +66,7 @@ class Job(BaseModel):
     employer_email: str
     company_name: Optional[str] = None
     status: str = "active"
-    created_at: datetime.datetime = datetime.datetime.utcnow()
+    created_at: datetime.datetime = datetime.datetime.now(datetime.timezone.utc)
 
 class JobSeeker(BaseModel):
     user_id: int
@@ -72,14 +80,14 @@ class JobSeeker(BaseModel):
 class JobApplication(BaseModel):
     job_id: int
     user_id: int
-    applied_at: datetime.datetime = datetime.datetime.utcnow()
+    applied_at: datetime.datetime = datetime.datetime.now(datetime.timezone.utc)
 
 class Message(BaseModel):
     sender_id: int
     recipient_id: int
     message_type: str = "text"
     content: str
-    sent_at: datetime.datetime = datetime.datetime.utcnow()
+    sent_at: datetime.datetime = datetime.datetime.now(datetime.timezone.utc)
     read_at: Optional[datetime.datetime] = None
 
 # Authentication
@@ -120,12 +128,11 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
                 "recipient_id": int(data["recipient_id"]),
                 "message_type": data.get("message_type", "text"),
                 "content": data["content"],
-                "sent_at": datetime.datetime.utcnow(),
+                "sent_at": datetime.datetime.now(datetime.timezone.utc),
                 "read_at": None
             }
             messages_collection.insert_one(message)
 
-            # Send to sender and recipient instantly
             if user_id in active_connections:
                 await active_connections[user_id].send_json(message)
             if data["recipient_id"] in active_connections:
@@ -152,7 +159,7 @@ async def register(user: User):
     if user.role == 0:
         jobseekers_collection.insert_one({"_id": user_dict["_id"], "email": user.email})
     token = create_access_token({"sub": str(user_dict["_id"])})
-    return {"access_token": token, "token_type": "bearer", "role": user.role}
+    return {"access_token": token, "token_type": "bearer", "role": user.role, "user_id": user_dict["_id"]}
 
 @app.post("/token")
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
@@ -160,7 +167,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     if not user or not verify_password(form_data.password, user["password"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     token = create_access_token({"sub": str(user["_id"])})
-    return {"access_token": token, "token_type": "bearer", "role": user["role"]}
+    return {"access_token": token, "token_type": "bearer", "role": user["role"], "user_id": user["_id"]}
 
 @app.get("/employer/dashboard")
 async def employer_dashboard(current_user: dict = Depends(get_current_user)):
@@ -213,7 +220,7 @@ async def apply_for_job(job_id: int, current_user: dict = Depends(get_current_us
     if job_applications_collection.find_one({"job_id": job_id, "user_id": current_user["_id"]}):
         raise HTTPException(status_code=400, detail="Already applied")
     last_app = job_applications_collection.find_one(sort=[("_id", -1)])
-    app_dict = {"job_id": job_id, "user_id": current_user["_id"], "applied_at": datetime.datetime.utcnow()}
+    app_dict = {"job_id": job_id, "user_id": current_user["_id"], "applied_at": datetime.datetime.now(datetime.timezone.utc)}
     app_dict["_id"] = (last_app["_id"] + 1) if last_app else 1
     job_applications_collection.insert_one(app_dict)
     return {"message": "Application submitted"}
