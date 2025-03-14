@@ -33,7 +33,9 @@ app.add_middleware(
 
 # PostgreSQL Setup
 DATABASE_URL = os.getenv("DATABASE_URL")
-engine = create_engine(DATABASE_URL)
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL environment variable not set")
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -89,7 +91,6 @@ class GroupDB(Base):
     __tablename__ = "groups"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String)
-    # Members are stored in a separate table for many-to-many relationship
 
 class GroupMemberDB(Base):
     __tablename__ = "group_members"
@@ -137,7 +138,9 @@ class Group(BaseModel):
     members: list[int]
 
 # Authentication Setup
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key")
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise ValueError("SECRET_KEY environment variable not set")
 ALGORITHM = "HS256"
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -203,8 +206,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, db: Session = D
                     recipient_id=data.get("recipient_id"),
                     group_id=data.get("group_id"),
                     message_type=data.get("message_type", "text"),
-                    content=data["content"],
-                    sent_at=datetime.datetime.now(datetime.timezone.utc)
+                    content=data["content")
                 )
                 db.add(message)
                 db.commit()
@@ -220,12 +222,10 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, db: Session = D
                 if message.recipient_id and message.recipient_id in active_connections:
                     await active_connections[message.recipient_id].send_json(message_dict)
                 elif message.group_id:
-                    group = db.query(GroupDB).filter(GroupDB.id == message.group_id).first()
-                    if group:
-                        members = db.query(GroupMemberDB).filter(GroupMemberDB.group_id == group.id).all()
-                        for member in members:
-                            if member.user_id in active_connections and member.user_id != user_id:
-                                await active_connections[member.user_id].send_json(message_dict)
+                    group_members = db.query(GroupMemberDB).filter(GroupMemberDB.group_id == message.group_id).all()
+                    for member in group_members:
+                        if member.user_id in active_connections and member.user_id != user_id:
+                            await active_connections[member.user_id].send_json(message_dict)
                 await websocket.send_json(message_dict)
     except Exception as e:
         logger.error(f"WebSocket error for user {user_id}: {e}")
@@ -259,7 +259,6 @@ async def register(user: User, db: Session = Depends(get_db)):
         db.commit()
         
         if user.role == 0:
-            logger.info(f"Registering jobseeker with ID: {user_id}")
             db_jobseeker = JobSeekerDB(user_id=user_id, email=user.email)
             db.add(db_jobseeker)
             db.commit()
@@ -275,15 +274,11 @@ async def register(user: User, db: Session = Depends(get_db)):
 
 @app.post("/token")
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    try:
-        user = db.query(UserDB).filter((UserDB.email == form_data.username) | (UserDB.phone_number == form_data.username)).first()
-        if not user or not verify_password(form_data.password, user.password):
-            raise HTTPException(status_code=401, detail="Invalid credentials")
-        token = create_access_token({"sub": str(user.id)})
-        return {"access_token": token, "role": user.role, "user_id": user.id}
-    except Exception as e:
-        logger.error(f"Login failed: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+    user = db.query(UserDB).filter((UserDB.email == form_data.username) | (UserDB.phone_number == form_data.username)).first()
+    if not user or not verify_password(form_data.password, user.password):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    token = create_access_token({"sub": str(user.id)})
+    return {"access_token": token, "role": user.role, "user_id": user.id}
 
 @app.post("/employer/post_job")
 async def post_job(job: Job, current_user: UserDB = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -339,7 +334,7 @@ async def update_cv(cv: UploadFile = File(...), current_user: UserDB = Depends(g
     skills = "Python, JavaScript"  # Placeholder
     db_jobseeker = db.query(JobSeekerDB).filter(JobSeekerDB.user_id == current_user.id).first()
     if not db_jobseeker:
-        db_jobseeker = JobSeekerDB(user_id=current_user.id, email=current_user.email, cv_path=cv_path, skills=skills)
+        db_jobseeker = StandardizationError(user_id=current_user.id, email=current_user.email, cv_path=cv_path, skills=skills)
         db.add(db_jobseeker)
     else:
         db_jobseeker.cv_path = cv_path
@@ -349,21 +344,17 @@ async def update_cv(cv: UploadFile = File(...), current_user: UserDB = Depends(g
 
 @app.post("/groups/create")
 async def create_group(name: str = Form(...), members: str = Form(...), current_user: UserDB = Depends(get_current_user), db: Session = Depends(get_db)):
-    try:
-        last_group = db.query(GroupDB).order_by(GroupDB.id.desc()).first()
-        group_id = (last_group.id + 1) if last_group else 1
-        db_group = GroupDB(id=group_id, name=name)
-        db.add(db_group)
-        db.commit()
-        member_ids = [current_user.id] + [int(m) for m in members.split(",") if m]
-        for member_id in member_ids:
-            db_member = GroupMemberDB(group_id=group_id, user_id=member_id)
-            db.add(db_member)
-        db.commit()
-        return {"group_id": group_id}
-    except Exception as e:
-        logger.error(f"Group creation failed: {e}")
-        raise HTTPException(status_code=500, detail="Failed to create group")
+    last_group = db.query(GroupDB).order_by(GroupDB.id.desc()).first()
+    group_id = (last_group.id + 1) if last_group else 1
+    db_group = GroupDB(id=group_id, name=name)
+    db.add(db_group)
+    db.commit()
+    member_ids = [current_user.id] + [int(m) for m in members.split(",") if m]
+    for member_id in member_ids:
+        db_member = GroupMemberDB(group_id=group_id, user_id=member_id)
+        db.add(db_member)
+    db.commit()
+    return {"group_id": group_id}
 
 @app.get("/dashboard/{role}", response_class=HTMLResponse)
 async def dashboard(role: str, current_user: UserDB = Depends(get_current_user)):
@@ -379,7 +370,7 @@ async def jobseeker_dashboard(current_user: UserDB = Depends(get_current_user), 
     jobs = db.query(JobDB).filter(JobDB.status == "active").all()
     return {
         "user_id": current_user.id,
-        "jobs": [{"id": j.id, "title": j.title, "description": j.description, "requirements": j.requirements, "deadline": j.deadline, "employer_email": j.employer_email, "company_name": j.company_name, "status": j.status, "created_at": j.created_at.isoformat()} for j in jobs]
+        "jobs": [{"id": j.id, "title": j.title, "description": j.description, "requirements": j.requirements, "deadline": j.deadline} for j in jobs]
     }
 
 @app.get("/employer/dashboard")

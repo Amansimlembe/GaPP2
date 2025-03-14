@@ -1,11 +1,9 @@
 fastapi
 uvicorn
-pymongo==3.12.0  # Remove this
-motor==2.5.1      # Remove this if used elsewhere
 python-jose[cryptography]
 passlib[bcrypt]
 python-dotenv
 requests
-psycopg2-binary   # Add for PostgreSQL
-sqlalchemy        # Add for ORM
-websockets        # Already present for WebSocket
+psycopg2-binary
+sqlalchemy
+websockets
