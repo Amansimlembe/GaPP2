@@ -71,18 +71,17 @@
     </div>
 
     <script>
-        const token = localStorage.getItem('token');
         const userId = parseInt(localStorage.getItem('userId'));
+        const role = parseInt(localStorage.getItem('role'));
         let socket, peer, localStream;
 
         async function loadDashboard() {
-            if (!token || !userId) {
+            if (!userId || role !== 1) {
                 window.location.href = '/';
                 return;
             }
-            const headers = { 'Authorization': `Bearer ${token}` };
             try {
-                const resp = await fetch('/employer/dashboard', { headers });
+                const resp = await fetch(`/employer/dashboard?user_id=${userId}`);
                 if (!resp.ok) throw new Error((await resp.json()).detail);
                 const data = await resp.json();
                 document.getElementById('jobList').innerHTML = data.jobs.map(job => `
@@ -107,13 +106,12 @@
                 loadChatList();
             } catch (error) {
                 console.error('Dashboard load error:', error.message);
-                if (error.message.includes('Not authenticated')) window.location.href = '/';
-                else alert('Error: ' + error.message);
+                alert('Error: ' + error.message);
             }
         }
 
         async function loadChatList() {
-            const resp = await fetch('/chat_list', { headers: { 'Authorization': `Bearer ${token}` } });
+            const resp = await fetch(`/chat_list?user_id=${userId}`);
             if (!resp.ok) throw new Error('Failed to fetch chat list');
             const chats = await resp.json();
             document.getElementById('chatList').innerHTML = chats.map(chat => `
@@ -123,7 +121,7 @@
 
         async function loadMessages(recipientId) {
             localStorage.setItem('chatTarget', recipientId);
-            const resp = await fetch(`/messages/${recipientId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+            const resp = await fetch(`/messages/${recipientId}?user_id=${userId}`);
             if (!resp.ok) throw new Error('Failed to fetch messages');
             const messages = await resp.json();
             document.getElementById('messages').innerHTML = messages.map(m => renderMessage(m)).join('');
@@ -175,7 +173,7 @@
             };
             const resp = await fetch('/employer/post_job', {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(job)
             });
             if (!resp.ok) throw new Error('Failed to post job');

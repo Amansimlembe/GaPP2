@@ -60,16 +60,10 @@
                     body: JSON.stringify({ email, phone_number, password, role })
                 });
                 const data = await response.json();
-                if (!response.ok) {
-                    throw new Error(data.detail || 'Registration failed');
-                }
-                localStorage.setItem('token', data.access_token);
-                localStorage.setItem('userId', data.user_id); // Store as string
+                if (!response.ok) throw new Error(data.detail || 'Registration failed');
+                localStorage.setItem('userId', data.user_id);
                 localStorage.setItem('role', data.role);
-                console.log('Token stored:', data.access_token);
-                const redirectUrl = `/dashboard/${data.role === 0 ? 'jobseeker' : 'employer'}`;
-                console.log(`Redirecting to: ${redirectUrl}`);
-                window.location.href = redirectUrl;
+                window.location.href = `/dashboard/${data.role === 0 ? 'jobseeker' : 'employer'}?user_id=${data.user_id}`;
             } catch (error) {
                 console.error('Registration error:', error.message);
                 alert(error.message);

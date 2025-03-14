@@ -55,31 +55,27 @@
     </div>
 
     <script>
-        const token = localStorage.getItem('token');
         const userId = parseInt(localStorage.getItem('userId'));
+        const role = parseInt(localStorage.getItem('role'));
         let socket, peer, localStream, cvSkills = [];
 
         async function loadDashboard() {
-            if (!token || !userId) {
+            if (!userId || role !== 0) {
                 window.location.href = '/';
                 return;
             }
-            const headers = { 'Authorization': `Bearer ${token}` };
             try {
-                // Fetch AI jobs
-                const aiJobsResp = await fetch('/jobs/ai_fetched', { headers });
+                const aiJobsResp = await fetch('/jobs/ai_fetched');
                 if (!aiJobsResp.ok) throw new Error('Failed to fetch AI jobs');
                 const aiJobs = await aiJobsResp.json();
 
-                // Fetch employer jobs
-                const employerJobsResp = await fetch('/jobseeker/dashboard', { headers });
+                const employerJobsResp = await fetch(`/jobseeker/dashboard?user_id=${userId}`);
                 if (!employerJobsResp.ok) throw new Error((await employerJobsResp.json()).detail);
                 const employerJobs = (await employerJobsResp.json()).jobs;
 
-                // Combine and match jobs with CV skills
                 const allJobs = [...employerJobs, ...aiJobs];
                 document.getElementById('jobList').innerHTML = allJobs
-                    .filter(job => cvSkills.some(skill => job.requirements.includes(skill)) || true) // Match CV skills
+                    .filter(job => cvSkills.some(skill => job.requirements.includes(skill)) || true)
                     .map(job => `
                         <div class="job-card">
                             <h4>${job.title}</h4>
@@ -88,7 +84,6 @@
                         </div>
                     `).join('');
 
-                // Initialize WebSocket for real-time chat
                 socket = new WebSocket(`wss://${window.location.host}/ws/${userId}`);
                 socket.onmessage = (event) => {
                     const msg = JSON.parse(event.data);
@@ -100,13 +95,12 @@
                 loadGroups();
             } catch (error) {
                 console.error('Dashboard load error:', error.message);
-                if (error.message.includes('Not authenticated')) window.location.href = '/';
-                else alert('Error: ' + error.message);
+                alert('Error: ' + error.message);
             }
         }
 
         async function loadChatList() {
-            const resp = await fetch('/chat_list', { headers: { 'Authorization': `Bearer ${token}` } });
+            const resp = await fetch(`/chat_list?user_id=${userId}`);
             if (!resp.ok) throw new Error('Failed to fetch chat list');
             const chats = await resp.json();
             document.getElementById('chatList').innerHTML = chats.map(chat => `
@@ -115,17 +109,17 @@
         }
 
         async function loadGroups() {
-            const resp = await fetch('/groups', { headers: { 'Authorization': `Bearer ${token}` } });
+            const resp = await fetch(`/groups?user_id=${userId}`);
             if (!resp.ok) throw new Error('Failed to fetch groups');
             const groups = await resp.json();
             document.getElementById('groupList').innerHTML = groups.map(group => `
-                           <div class="chat-card" onclick="loadGroupMessages(${group.id})">${group.name}</div>
+                <div class="chat-card" onclick="loadGroupMessages(${group.id})">${group.name}</div>
             `).join('');
         }
 
         async function loadMessages(recipientId) {
             localStorage.setItem('chatTarget', recipientId);
-            const resp = await fetch(`/messages/${recipientId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+            const resp = await fetch(`/messages/${recipientId}?user_id=${userId}`);
             if (!resp.ok) throw new Error('Failed to fetch messages');
             const messages = await resp.json();
             document.getElementById('messages').innerHTML = messages.map(m => renderMessage(m)).join('');
@@ -133,7 +127,7 @@
 
         async function loadGroupMessages(groupId) {
             localStorage.setItem('chatTarget', `group_${groupId}`);
-            const resp = await fetch(`/messages/group/${groupId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+            const resp = await fetch(`/messages/group/${groupId}?user_id=${userId}`);
             if (!resp.ok) throw new Error('Failed to fetch group messages');
             const messages = await resp.json();
             document.getElementById('messages').innerHTML = messages.map(m => renderMessage(m)).join('');
@@ -180,17 +174,16 @@
             const file = document.getElementById('cvInput').files[0];
             if (!file) return alert('Select a CV file');
             const formData = new FormData();
+            formData.append('user_id', userId);
             formData.append('cv', file);
             const resp = await fetch('/jobseeker/update_cv', {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` },
                 body: formData
             });
             if (!resp.ok) throw new Error('Failed to upload CV');
             const data = await resp.json();
             alert(data.message);
 
-            // AI CV Enhancement (placeholder using pdf.js)
             const reader = new FileReader();
             reader.onload = async () => {
                 const pdf = await pdfjsLib.getDocument({ data: reader.result }).promise;
@@ -200,9 +193,9 @@
                     const content = await page.getTextContent();
                     text += content.items.map(item => item.str).join(' ');
                 }
-                cvSkills = text.match(/Python|JavaScript|Java|C\+\+|SQL|HTML|CSS/gi) || ['Python']; // Basic skill extraction
+                cvSkills = text.match(/Python|JavaScript|Java|C\+\+|SQL|HTML|CSS/gi) || ['Python'];
                 console.log('Extracted skills:', cvSkills);
-                loadDashboard(); // Reload jobs with updated skills
+                loadDashboard();
             };
             reader.readAsArrayBuffer(file);
         }
@@ -210,8 +203,8 @@
         async function applyForJob(jobId) {
             const resp = await fetch('/jobseeker/apply', {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ job_id: jobId })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ job_id: jobId, user_id: userId })
             });
             if (!resp.ok) throw new Error('Failed to apply');
             alert((await resp.json()).message);
@@ -222,8 +215,8 @@
             const members = document.getElementById('groupMembers').value;
             const resp = await fetch('/groups/create', {
                 method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: new URLSearchParams({ name, members })
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ user_id: userId, name, members })
             });
             if (!resp.ok) throw new Error('Failed to create group');
             alert('Group created');

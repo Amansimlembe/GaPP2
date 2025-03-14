@@ -41,17 +41,16 @@
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
             try {
-                const response = await fetch('/token', {
+                const response = await fetch('/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: new URLSearchParams({ username, password })
                 });
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.detail || 'Login failed');
-                localStorage.setItem('token', data.access_token);
                 localStorage.setItem('userId', data.user_id);
                 localStorage.setItem('role', data.role);
-                window.location.href = `/dashboard/${data.role === 0 ? 'jobseeker' : 'employer'}`;
+                window.location.href = `/dashboard/${data.role === 0 ? 'jobseeker' : 'employer'}?user_id=${data.user_id}`;
             } catch (error) {
                 alert(error.message);
             }

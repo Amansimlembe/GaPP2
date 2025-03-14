@@ -1,5 +1,4 @@
-from fastapi import FastAPI, HTTPException, WebSocket, Depends, UploadFile, File, Form
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi import FastAPI, HTTPException, WebSocket, Form, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey
@@ -8,7 +7,6 @@ from sqlalchemy.orm import sessionmaker, Session
 from pydantic import BaseModel
 from typing import Optional, Dict
 import datetime
-from jose import jwt
 import os
 from passlib.context import CryptContext
 import uvicorn
@@ -39,7 +37,7 @@ engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# SQLAlchemy Models
+# SQLAlchemy Models (unchanged)
 class UserDB(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
@@ -100,7 +98,7 @@ class GroupMemberDB(Base):
 
 Base.metadata.create_all(bind=engine)
 
-# Pydantic Models
+# Pydantic Models (unchanged)
 class User(BaseModel):
     email: str
     phone_number: str
@@ -137,30 +135,14 @@ class Group(BaseModel):
     name: str
     members: list[int]
 
-# Authentication Setup
-SECRET_KEY = os.getenv("SECRET_KEY")
-if not SECRET_KEY:
-    raise ValueError("SECRET_KEY environment variable not set")
-ALGORITHM = "HS256"
+# Password Hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
 def get_password_hash(password):
     return pwd_context.hash(password)
-
-def create_access_token(data: dict):
-    try:
-        payload = data.copy()
-        payload["sub"] = str(payload["sub"])
-        token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
-        logger.info(f"Token created for user_id: {payload['sub']}")
-        return token
-    except Exception as e:
-        logger.error(f"Token creation failed: {e}")
-        raise HTTPException(status_code=500, detail="Failed to create access token")
 
 def get_db():
     db = SessionLocal()
@@ -169,19 +151,7 @@ def get_db():
     finally:
         db.close()
 
-async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id = int(payload.get("sub"))
-        user = db.query(UserDB).filter(UserDB.id == user_id).first()
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        return user
-    except Exception as e:
-        logger.error(f"Token validation failed: {e}")
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-# WebSocket for Real-Time Messaging
+# WebSocket for Real-Time Messaging (unchanged)
 active_connections: Dict[int, WebSocket] = {}
 webrtc_signals: Dict[str, list] = {}
 
@@ -233,16 +203,13 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, db: Session = D
         if user_id in active_connections:
             del active_connections[user_id]
 
-# API Endpoints
+# API Endpoints (No Token Authentication)
 @app.post("/register")
 async def register(user: User, db: Session = Depends(get_db)):
     try:
-        logger.info(f"Attempting to register user with email: {user.email}")
         if db.query(UserDB).filter(UserDB.email == user.email).first():
-            logger.warning(f"Duplicate email detected: {user.email}")
             raise HTTPException(status_code=400, detail="Email already exists")
         if db.query(UserDB).filter(UserDB.phone_number == user.phone_number).first():
-            logger.warning(f"Duplicate phone number detected: {user.phone_number}")
             raise HTTPException(status_code=400, detail="Phone number already exists")
         
         hashed_password = get_password_hash(user.password)
@@ -263,32 +230,33 @@ async def register(user: User, db: Session = Depends(get_db)):
             db.add(db_jobseeker)
             db.commit()
         
-        token = create_access_token({"sub": str(user_id)})
         logger.info(f"User {user_id} registered successfully")
-        return {"access_token": token, "role": user.role, "user_id": user_id}
+        return {"user_id": user_id, "role": user.role}
     except HTTPException as he:
         raise he
     except Exception as e:
-        logger.error(f"Registration failed with error: {str(e)}")
+        logger.error(f"Registration failed: {e}")
         return JSONResponse(status_code=500, content={"detail": f"Internal server error: {str(e)}"})
 
-@app.post("/token")
-async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(UserDB).filter((UserDB.email == form_data.username) | (UserDB.phone_number == form_data.username)).first()
-    if not user or not verify_password(form_data.password, user.password):
+@app.post("/login")
+async def login(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
+    user = db.query(UserDB).filter((UserDB.email == username) | (UserDB.phone_number == username)).first()
+    if not user or not verify_password(password, user.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    token = create_access_token({"sub": str(user.id)})
-    return {"access_token": token, "role": user.role, "user_id": user.id}
+    return {"user_id": user.id, "role": user.role}
 
 @app.post("/employer/post_job")
-async def post_job(job: Job, current_user: UserDB = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role != 1:
+async def post_job(job: Job, db: Session = Depends(get_db)):
+    if job.user_id <= 0:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+    user = db.query(UserDB).filter(UserDB.id == job.user_id).first()
+    if not user or user.role != 1:
         raise HTTPException(status_code=403, detail="Not authorized")
     last_job = db.query(JobDB).order_by(JobDB.id.desc()).first()
     job_id = (last_job.id + 1) if last_job else 1
     db_job = JobDB(
         id=job_id,
-        user_id=current_user.id,
+        user_id=job.user_id,
         title=job.title,
         description=job.description,
         requirements=job.requirements,
@@ -313,28 +281,34 @@ async def ai_fetched_jobs():
         return []
 
 @app.post("/jobseeker/apply")
-async def apply_for_job(job_id: int, current_user: UserDB = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role != 0:
+async def apply_for_job(application: JobApplication, db: Session = Depends(get_db)):
+    if application.user_id <= 0:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+    user = db.query(UserDB).filter(UserDB.id == application.user_id).first()
+    if not user or user.role != 0:
         raise HTTPException(status_code=403, detail="Not authorized")
     last_app = db.query(JobApplicationDB).order_by(JobApplicationDB.id.desc()).first()
     app_id = (last_app.id + 1) if last_app else 1
-    db_app = JobApplicationDB(id=app_id, job_id=job_id, user_id=current_user.id)
+    db_app = JobApplicationDB(id=app_id, job_id=application.job_id, user_id=application.user_id)
     db.add(db_app)
     db.commit()
     return {"message": "Application submitted"}
 
 @app.post("/jobseeker/update_cv")
-async def update_cv(cv: UploadFile = File(...), current_user: UserDB = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role != 0:
+async def update_cv(user_id: int = Form(...), cv: UploadFile = File(...), db: Session = Depends(get_db)):
+    if user_id <= 0:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+    user = db.query(UserDB).filter(UserDB.id == user_id).first()
+    if not user or user.role != 0:
         raise HTTPException(status_code=403, detail="Not authorized")
-    cv_path = f"uploads/cv_{current_user.id}.pdf"
+    cv_path = f"uploads/cv_{user_id}.pdf"
     os.makedirs("uploads", exist_ok=True)
     with open(cv_path, "wb") as f:
         f.write(await cv.read())
     skills = "Python, JavaScript"  # Placeholder
-    db_jobseeker = db.query(JobSeekerDB).filter(JobSeekerDB.user_id == current_user.id).first()
+    db_jobseeker = db.query(JobSeekerDB).filter(JobSeekerDB.user_id == user_id).first()
     if not db_jobseeker:
-        db_jobseeker = JobSeekerDB(user_id=current_user.id, email=current_user.email, cv_path=cv_path, skills=skills)
+        db_jobseeker = JobSeekerDB(user_id=user_id, email=user.email, cv_path=cv_path, skills=skills)
         db.add(db_jobseeker)
     else:
         db_jobseeker.cv_path = cv_path
@@ -343,13 +317,15 @@ async def update_cv(cv: UploadFile = File(...), current_user: UserDB = Depends(g
     return {"message": "CV updated", "skills": skills}
 
 @app.post("/groups/create")
-async def create_group(name: str = Form(...), members: str = Form(...), current_user: UserDB = Depends(get_current_user), db: Session = Depends(get_db)):
+async def create_group(user_id: int = Form(...), name: str = Form(...), members: str = Form(...), db: Session = Depends(get_db)):
+    if user_id <= 0:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
     last_group = db.query(GroupDB).order_by(GroupDB.id.desc()).first()
     group_id = (last_group.id + 1) if last_group else 1
     db_group = GroupDB(id=group_id, name=name)
     db.add(db_group)
     db.commit()
-    member_ids = [current_user.id] + [int(m) for m in members.split(",") if m]
+    member_ids = [user_id] + [int(m) for m in members.split(",") if m]
     for member_id in member_ids:
         db_member = GroupMemberDB(group_id=group_id, user_id=member_id)
         db.add(db_member)
@@ -357,60 +333,81 @@ async def create_group(name: str = Form(...), members: str = Form(...), current_
     return {"group_id": group_id}
 
 @app.get("/dashboard/{role}", response_class=HTMLResponse)
-async def dashboard(role: str, current_user: UserDB = Depends(get_current_user)):
-    if (role == "jobseeker" and current_user.role == 0) or (role == "employer" and current_user.role == 1):
+async def dashboard(role: str, user_id: int):
+    if user_id <= 0:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+    db = SessionLocal()
+    try:
+        user = db.query(UserDB).filter(UserDB.id == user_id).first()
+        if not user or (role == "jobseeker" and user.role != 0) or (role == "employer" and user.role != 1):
+            raise HTTPException(status_code=403, detail="Not authorized")
         with open(f"static/{role}_dashboard.html", "r") as f:
             return HTMLResponse(content=f.read())
-    raise HTTPException(status_code=403, detail="Not authorized")
+    finally:
+        db.close()
 
 @app.get("/jobseeker/dashboard")
-async def jobseeker_dashboard(current_user: UserDB = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role != 0:
+async def jobseeker_dashboard(user_id: int, db: Session = Depends(get_db)):
+    if user_id <= 0:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+    user = db.query(UserDB).filter(UserDB.id == user_id).first()
+    if not user or user.role != 0:
         raise HTTPException(status_code=403, detail="Not authorized")
     jobs = db.query(JobDB).filter(JobDB.status == "active").all()
     return {
-        "user_id": current_user.id,
+        "user_id": user_id,
         "jobs": [{"id": j.id, "title": j.title, "description": j.description, "requirements": j.requirements, "deadline": j.deadline} for j in jobs]
     }
 
 @app.get("/employer/dashboard")
-async def employer_dashboard(current_user: UserDB = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role != 1:
+async def employer_dashboard(user_id: int, db: Session = Depends(get_db)):
+    if user_id <= 0:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+    user = db.query(UserDB).filter(UserDB.id == user_id).first()
+    if not user or user.role != 1:
         raise HTTPException(status_code=403, detail="Not authorized")
-    jobs = db.query(JobDB).filter(JobDB.user_id == current_user.id).all()
-    applications = db.query(JobApplicationDB).join(JobDB, JobApplicationDB.job_id == JobDB.id).filter(JobDB.user_id == current_user.id).all()
+    jobs = db.query(JobDB).filter(JobDB.user_id == user_id).all()
+    applications = db.query(JobApplicationDB).join(JobDB, JobApplicationDB.job_id == JobDB.id).filter(JobDB.user_id == user_id).all()
     return {
-        "user_id": current_user.id,
+        "user_id": user_id,
         "jobs": [{"id": j.id, "title": j.title, "description": j.description} for j in jobs],
         "applications": [{"job_id": a.job_id, "user_id": a.user_id, "applied_at": a.applied_at.isoformat()} for a in applications]
     }
 
 @app.get("/chat_list")
-async def get_chat_list(current_user: UserDB = Depends(get_current_user), db: Session = Depends(get_db)):
-    messages = db.query(MessageDB).filter((MessageDB.sender_id == current_user.id) | (MessageDB.recipient_id == current_user.id)).all()
+async def get_chat_list(user_id: int, db: Session = Depends(get_db)):
+    if user_id <= 0:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+    messages = db.query(MessageDB).filter((MessageDB.sender_id == user_id) | (MessageDB.recipient_id == user_id)).all()
     chat_dict = {}
     for msg in messages:
-        other_id = msg.recipient_id if msg.sender_id == current_user.id else msg.sender_id
+        other_id = msg.recipient_id if msg.sender_id == user_id else msg.sender_id
         if other_id and other_id not in chat_dict:
             user = db.query(UserDB).filter(UserDB.id == other_id).first()
             chat_dict[other_id] = {"user_id": other_id, "email": user.email, "last_message": msg.sent_at.isoformat(), "unread": 0}
     return list(chat_dict.values())
 
 @app.get("/messages/{recipient_id}")
-async def get_messages(recipient_id: int, current_user: UserDB = Depends(get_current_user), db: Session = Depends(get_db)):
+async def get_messages(recipient_id: int, user_id: int, db: Session = Depends(get_db)):
+    if user_id <= 0:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
     messages = db.query(MessageDB).filter(
-        ((MessageDB.sender_id == current_user.id) & (MessageDB.recipient_id == recipient_id)) |
-        ((MessageDB.sender_id == recipient_id) & (MessageDB.recipient_id == current_user.id))
+        ((MessageDB.sender_id == user_id) & (MessageDB.recipient_id == recipient_id)) |
+        ((MessageDB.sender_id == recipient_id) & (MessageDB.recipient_id == user_id))
     ).order_by(MessageDB.sent_at).all()
     return [{"sender_id": m.sender_id, "recipient_id": m.recipient_id, "message_type": m.message_type, "content": m.content, "sent_at": m.sent_at.isoformat()} for m in messages]
 
 @app.get("/groups")
-async def get_groups(current_user: UserDB = Depends(get_current_user), db: Session = Depends(get_db)):
-    groups = db.query(GroupDB).join(GroupMemberDB, GroupDB.id == GroupMemberDB.group_id).filter(GroupMemberDB.user_id == current_user.id).all()
+async def get_groups(user_id: int, db: Session = Depends(get_db)):
+    if user_id <= 0:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+    groups = db.query(GroupDB).join(GroupMemberDB, GroupDB.id == GroupMemberDB.group_id).filter(GroupMemberDB.user_id == user_id).all()
     return [{"id": g.id, "name": g.name} for g in groups]
 
 @app.get("/messages/group/{group_id}")
-async def get_group_messages(group_id: int, current_user: UserDB = Depends(get_current_user), db: Session = Depends(get_db)):
+async def get_group_messages(group_id: int, user_id: int, db: Session = Depends(get_db)):
+    if user_id <= 0:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
     messages = db.query(MessageDB).filter(MessageDB.group_id == group_id).order_by(MessageDB.sent_at).all()
     return [{"sender_id": m.sender_id, "group_id": m.group_id, "message_type": m.message_type, "content": m.content, "sent_at": m.sent_at.isoformat()} for m in messages]
 
