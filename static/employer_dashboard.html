@@ -4,84 +4,150 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Employer Dashboard - GaPP2</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f0f4f8; }
+        .container { max-width: 1200px; margin: auto; display: grid; grid-template-columns: 1fr 2fr; gap: 20px; }
+        .sidebar { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .main { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h2, h3 { color: #333; }
+        button { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .job-card, .app-card { padding: 15px; margin-bottom: 10px; background: #f9f9f9; border-radius: 5px; }
+        .form-group { margin-bottom: 20px; }
+        input, textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
+        .chat-area { height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; }
+        .message-input { display: flex; gap: 10px; }
+        video { width: 100%; max-width: 400px; border-radius: 5px; }
+    </style>
 </head>
 <body>
-    <div class="container mt-5">
-        <h2>Employer Dashboard</h2>
-        <button class="btn btn-danger mb-3" onclick="logout()">Logout</button>
-
-        <h3>Post a Job</h3>
-        <form id="jobForm" class="mb-4">
-            <div class="mb-3">
-                <label for="title" class="form-label">Title</label>
-                <input type="text" class="form-control" id="title" required>
+    <div class="container">
+        <div class="sidebar">
+            <h2>Employer Dashboard</h2>
+            <button onclick="logout()">Logout</button>
+            <h3>Chat List</h3>
+            <div id="chatList"></div>
+        </div>
+        <div class="main">
+            <h3>Post a Job</h3>
+            <form id="jobForm">
+                <div class="form-group">
+                    <input type="text" id="title" placeholder="Title" required>
+                </div>
+                <div class="form-group">
+                    <textarea id="description" placeholder="Description" required></textarea>
+                </div>
+                <div class="form-group">
+                    <textarea id="requirements" placeholder="Requirements" required></textarea>
+                </div>
+                <div class="form-group">
+                    <input type="date" id="deadline" required>
+                </div>
+                <div class="form-group">
+                    <input type="email" id="employer_email" placeholder="Email" required>
+                </div>
+                <div class="form-group">
+                    <input type="text" id="company_name" placeholder="Company Name">
+                </div>
+                <button type="submit">Post Job</button>
+            </form>
+            <h3>Your Jobs</h3>
+            <div id="jobList"></div>
+            <h3>Applications</h3>
+            <div id="applications"></div>
+            <h3>Chat</h3>
+            <div id="messages" class="chat-area"></div>
+            <div class="message-input">
+                <input type="text" id="messageInput" placeholder="Type a message">
+                <input type="file" id="mediaInput" accept="image/*,audio/*,video/*">
+                <button onclick="sendMessage('text')">Send Text</button>
+                <button onclick="sendMessage('media')">Send Media</button>
             </div>
-            <div class="mb-3">
-                <label for="description" class="form-label">Description</label>
-                <textarea class="form-control" id="description" required></textarea>
-            </div>
-            <div class="mb-3">
-                <label for="requirements" class="form-label">Requirements</label>
-                <textarea class="form-control" id="requirements" required></textarea>
-            </div>
-            <div class="mb-3">
-                <label for="deadline" class="form-label">Deadline</label>
-                <input type="date" class="form-control" id="deadline" required>
-            </div>
-            <div class="mb-3">
-                <label for="employer_email" class="form-label">Email</label>
-                <input type="email" class="form-control" id="employer_email" required>
-            </div>
-            <div class="mb-3">
-                <label for="company_name" class="form-label">Company Name</label>
-                <input type="text" class="form-control" id="company_name">
-            </div>
-            <button type="submit" class="btn btn-primary">Post Job</button>
-        </form>
-
-        <h3>Your Jobs</h3>
-        <div id="jobList" class="mb-4"></div>
-
-        <h3>Applications</h3>
-        <div id="applications" class="mb-4"></div>
+            <h3>Video Call</h3>
+            <video id="localVideo" autoplay muted></video>
+            <video id="remoteVideo" autoplay></video>
+            <button onclick="startVideoCall()">Start Call</button>
+        </div>
     </div>
 
     <script>
         const token = localStorage.getItem('token');
-        const baseUrl = window.location.hostname === 'localhost' ? 'http://localhost:8000' : 'https://gapp2-znqj.onrender.com';
+        const userId = parseInt(localStorage.getItem('userId'));
+        let socket, peer, localStream;
 
         async function loadDashboard() {
-            const response = await fetch(`${baseUrl}/employer/dashboard`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.detail || 'Failed to load dashboard');
-
+            const resp = await fetch('/employer/dashboard', { headers: { 'Authorization': `Bearer ${token}` } });
+            const data = await resp.json();
             document.getElementById('jobList').innerHTML = data.jobs.map(job => `
-                <div class="card mb-2">
-                    <div class="card-body">
-                        <h5 class="card-title">${job.title}</h5>
-                        <p class="card-text">${job.description}</p>
-                    </div>
+                <div class="job-card">
+                    <h4>${job.title}</h4>
+                    <p>${job.description}</p>
+                </div>
+            `).join('');
+            document.getElementById('applications').innerHTML = data.applications.map(app => `
+                <div class="app-card">
+                    <h4>${app.job[0]?.title || 'Unknown'}</h4>
+                    <p>Applicant: ${app.jobseeker[0]?.email || 'Unknown'}</p>
                 </div>
             `).join('');
 
-            document.getElementById('applications').innerHTML = data.applications.map(app => `
-                <div class="card mb-2">
-                    <div class="card-body">
-                        <h5 class="card-title">${app.job[0]?.title || 'Unknown Job'}</h5>
-                        <p class="card-text">Applicant: ${app.jobseeker[0]?.email || 'Unknown'}</p>
-                    </div>
-                </div>
+            socket = new WebSocket(`wss://${window.location.host}/ws/${userId}`);
+            socket.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'webrtc_signal') handleSignal(msg);
+                else appendMessage(msg);
+            };
+
+            loadChatList();
+        }
+
+        async function loadChatList() {
+            const resp = await fetch('/chat_list', { headers: { 'Authorization': `Bearer ${token}` } });
+            const chats = await resp.json();
+            document.getElementById('chatList').innerHTML = chats.map(chat => `
+                <div class="chat-card" onclick="loadMessages(${chat.user_id})">${chat.email || chat.company_name} (${chat.unread})</div>
             `).join('');
+        }
+
+        async function loadMessages(recipientId) {
+            localStorage.setItem('chatTarget', recipientId);
+            const resp = await fetch(`/messages/${recipientId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+            const messages = await resp.json();
+            document.getElementById('messages').innerHTML = messages.map(m => renderMessage(m)).join('');
+        }
+
+        function renderMessage(msg) {
+            if (msg.message_type === 'text') return `<p>${msg.sender_id === userId ? 'You' : 'Them'}: ${msg.content}</p>`;
+            if (msg.message_type === 'image') return `<p><img src="${msg.content}" style="max-width: 200px;"></p>`;
+            if (msg.message_type === 'audio') return `<p><audio controls src="${msg.content}"></audio></p>`;
+            if (msg.message_type === 'video') return `<p><video controls src="${msg.content}" style="max-width: 200px;"></video></p>`;
+        }
+
+        async function sendMessage(type) {
+            const target = localStorage.getItem('chatTarget');
+            if (!target) return alert('Select a chat first');
+            if (type === 'text') {
+                const content = document.getElementById('messageInput').value;
+                socket.send(JSON.stringify({ recipient_id: parseInt(target), message_type: 'text', content }));
+                document.getElementById('messageInput').value = '';
+            } else {
+                const file = document.getElementById('mediaInput').files[0];
+                const reader = new FileReader();
+                reader.onload = () => {
+                    socket.send(JSON.stringify({ recipient_id: parseInt(target), message_type: file.type.split('/')[0], content: reader.result }));
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function appendMessage(msg) {
+            document.getElementById('messages').innerHTML += renderMessage(msg);
         }
 
         document.getElementById('jobForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const job = {
-                user_id: parseInt(localStorage.getItem('userId')),
+                user_id: userId,
                 title: document.getElementById('title').value,
                 description: document.getElementById('description').value,
                 requirements: document.getElementById('requirements').value,
@@ -89,31 +155,62 @@
                 employer_email: document.getElementById('employer_email').value,
                 company_name: document.getElementById('company_name').value
             };
-
-            const response = await fetch(`${baseUrl}/employer/post_job`, {
+            const resp = await fetch('/employer/post_job', {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify(job)
             });
-            const data = await response.json();
-            if (response.ok) {
-                alert(data.message);
-                loadDashboard();
-            } else {
-                alert(data.detail || 'Failed to post job');
-            }
+            alert((await resp.json()).message);
+            loadDashboard();
         });
 
-        function logout() {
-            localStorage.removeItem('token');
-            localStorage.removeItem('userId');
-            window.location.href = 'login.html';
+        async function startVideoCall() {
+            const target = localStorage.getItem('chatTarget');
+            if (!target) return alert('Select a chat');
+            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            document.getElementById('localVideo').srcObject = localStream;
+            peer = new RTCPeerConnection();
+            localStream.getTracks().forEach(track => peer.addTrack(track, localStream));
+            peer.ontrack = (event) => document.getElementById('remoteVideo').srcObject = event.streams[0];
+            peer.onicecandidate = (event) => {
+                if (event.candidate) {
+                    socket.send(JSON.stringify({ type: 'webrtc_signal', signal: event.candidate, to: target, room: `${userId}-${target}` }));
+                }
+            };
+            const offer = await peer.createOffer();
+            await peer.setLocalDescription(offer);
+            socket.send(JSON.stringify({ type: 'webrtc_signal', signal: offer, to: target, room: `${userId}-${target}` }));
         }
 
-        window.onload = () => {
-            if (!token) window.location.href = 'login.html';
-            else loadDashboard().catch(err => alert(err.message));
-        };
+        function handleSignal(msg) {
+            if (msg.signal.type === 'offer') {
+                peer = new RTCPeerConnection();
+                localStream = navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                document.getElementById('localVideo').srcObject = localStream;
+                localStream.getTracks().forEach(track => peer.addTrack(track, localStream));
+                peer.ontrack = (event) => document.getElementById('remoteVideo').srcObject = event.streams[0];
+                peer.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        socket.send(JSON.stringify({ type: 'webrtc_signal', signal: event.candidate, to: msg.sender_id, room: msg.room }));
+                    }
+                };
+                peer.setRemoteDescription(new RTCSessionDescription(msg.signal));
+                const answer = peer.createAnswer();
+                peer.setLocalDescription(answer);
+                socket.send(JSON.stringify({ type: 'webrtc_signal', signal: answer, to: msg.sender_id, room: msg.room }));
+            } else if (msg.signal.type === 'answer') {
+                peer.setRemoteDescription(new RTCSessionDescription(msg.signal));
+            } else {
+                peer.addIceCandidate(new RTCIceCandidate(msg.signal));
+            }
+        }
+
+        function logout() {
+            localStorage.clear();
+            window.location.href = '/';
+        }
+
+        window.onload = () => token ? loadDashboard() : window.location.href = '/';
     </script>
 </body>
 </html>
