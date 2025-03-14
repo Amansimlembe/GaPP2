@@ -206,7 +206,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, db: Session = D
                     recipient_id=data.get("recipient_id"),
                     group_id=data.get("group_id"),
                     message_type=data.get("message_type", "text"),
-                    content=data["content")
+                    content=data["content"]
                 )
                 db.add(message)
                 db.commit()
@@ -334,7 +334,7 @@ async def update_cv(cv: UploadFile = File(...), current_user: UserDB = Depends(g
     skills = "Python, JavaScript"  # Placeholder
     db_jobseeker = db.query(JobSeekerDB).filter(JobSeekerDB.user_id == current_user.id).first()
     if not db_jobseeker:
-        db_jobseeker = StandardizationError(user_id=current_user.id, email=current_user.email, cv_path=cv_path, skills=skills)
+        db_jobseeker = JobSeekerDB(user_id=current_user.id, email=current_user.email, cv_path=cv_path, skills=skills)
         db.add(db_jobseeker)
     else:
         db_jobseeker.cv_path = cv_path
