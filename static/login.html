@@ -10,7 +10,7 @@
         h2 { text-align: center; color: #333; }
         .form-group { margin-bottom: 20px; }
         label { display: block; margin-bottom: 5px; color: #555; }
-        input, select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
+        input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
         button { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
         button:hover { background: #0056b3; }
         p { text-align: center; margin-top: 20px; }
@@ -50,6 +50,7 @@
                 if (!response.ok) throw new Error(data.detail || 'Login failed');
                 localStorage.setItem('token', data.access_token);
                 localStorage.setItem('userId', data.user_id);
+                localStorage.setItem('role', data.role);
                 window.location.href = `/dashboard/${data.role === 0 ? 'jobseeker' : 'employer'}`;
             } catch (error) {
                 alert(error.message);

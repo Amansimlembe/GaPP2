@@ -64,7 +64,8 @@
                     throw new Error(data.detail || 'Registration failed');
                 }
                 localStorage.setItem('token', data.access_token);
-                localStorage.setItem('userId', String(data.user_id)); // Ensure string
+                localStorage.setItem('userId', data.user_id); // Store as string
+                localStorage.setItem('role', data.role);
                 console.log('Token stored:', data.access_token);
                 const redirectUrl = `/dashboard/${data.role === 0 ? 'jobseeker' : 'employer'}`;
                 console.log(`Redirecting to: ${redirectUrl}`);

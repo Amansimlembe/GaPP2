@@ -63,7 +63,7 @@
                 <button onclick="sendMessage('text')">Send Text</button>
                 <button onclick="sendMessage('media')">Send Media</button>
             </div>
-            <h3>Video Call</h3>
+            <h3>Video Interview</h3>
             <video id="localVideo" autoplay muted></video>
             <video id="remoteVideo" autoplay></video>
             <button onclick="startVideoCall()">Start Call</button>
@@ -76,13 +76,14 @@
         let socket, peer, localStream;
 
         async function loadDashboard() {
+            if (!token || !userId) {
+                window.location.href = '/';
+                return;
+            }
+            const headers = { 'Authorization': `Bearer ${token}` };
             try {
-                const headers = { 'Authorization': `Bearer ${token}` };
                 const resp = await fetch('/employer/dashboard', { headers });
-                if (!resp.ok) {
-                    const errorData = await resp.json();
-                    throw new Error(errorData.detail || 'Failed to load dashboard');
-                }
+                if (!resp.ok) throw new Error((await resp.json()).detail);
                 const data = await resp.json();
                 document.getElementById('jobList').innerHTML = data.jobs.map(job => `
                     <div class="job-card">
@@ -92,8 +93,7 @@
                 `).join('');
                 document.getElementById('applications').innerHTML = data.applications.map(app => `
                     <div class="app-card">
-                        <h4>${app.job[0]?.title || 'Unknown'}</h4>
-                        <p>Applicant: ${app.jobseeker[0]?.email || 'Unknown'}</p>
+                        <p>Job ID: ${app.job_id}, Applicant ID: ${app.user_id}, Applied: ${app.applied_at}</p>
                     </div>
                 `).join('');
 
@@ -107,11 +107,8 @@
                 loadChatList();
             } catch (error) {
                 console.error('Dashboard load error:', error.message);
-                if (error.message.includes('Not authenticated')) {
-                    window.location.href = '/';
-                } else {
-                    alert('Failed to load dashboard: ' + error.message);
-                }
+                if (error.message.includes('Not authenticated')) window.location.href = '/';
+                else alert('Error: ' + error.message);
             }
         }
 
@@ -120,7 +117,7 @@
             if (!resp.ok) throw new Error('Failed to fetch chat list');
             const chats = await resp.json();
             document.getElementById('chatList').innerHTML = chats.map(chat => `
-                <div class="chat-card" onclick="loadMessages(${chat.user_id})">${chat.email || chat.company_name} (${chat.unread})</div>
+                <div class="chat-card" onclick="loadMessages(${chat.user_id})">${chat.email} (${chat.unread})</div>
             `).join('');
         }
 
@@ -137,20 +134,24 @@
             if (msg.message_type === 'image') return `<p><img src="${msg.content}" style="max-width: 200px;"></p>`;
             if (msg.message_type === 'audio') return `<p><audio controls src="${msg.content}"></audio></p>`;
             if (msg.message_type === 'video') return `<p><video controls src="${msg.content}" style="max-width: 200px;"></video></p>`;
+            return `<p>${msg.sender_id === userId ? 'You' : 'Them'}: [Unsupported format]</p>`;
         }
 
         async function sendMessage(type) {
             const target = localStorage.getItem('chatTarget');
             if (!target) return alert('Select a chat first');
+            const msg = { recipient_id: parseInt(target), message_type: type };
             if (type === 'text') {
-                const content = document.getElementById('messageInput').value;
-                socket.send(JSON.stringify({ recipient_id: parseInt(target), message_type: 'text', content }));
+                msg.content = document.getElementById('messageInput').value;
+                socket.send(JSON.stringify(msg));
                 document.getElementById('messageInput').value = '';
             } else {
                 const file = document.getElementById('mediaInput').files[0];
                 const reader = new FileReader();
                 reader.onload = () => {
-                    socket.send(JSON.stringify({ recipient_id: parseInt(target), message_type: file.type.split('/')[0], content: reader.result }));
+                    msg.message_type = file.type.split('/')[0];
+                    msg.content = reader.result;
+                    socket.send(JSON.stringify(msg));
                 };
                 reader.readAsDataURL(file);
             }
@@ -158,6 +159,7 @@
 
         function appendMessage(msg) {
             document.getElementById('messages').innerHTML += renderMessage(msg);
+            document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
         }
 
         document.getElementById('jobForm').addEventListener('submit', async (e) => {
@@ -199,10 +201,10 @@
             socket.send(JSON.stringify({ type: 'webrtc_signal', signal: offer, to: target, room: `${userId}-${target}` }));
         }
 
-        function handleSignal(msg) {
-            if (msg.signal.type === 'offer') {
+        async function handleSignal(msg) {
+            if (!peer) {
                 peer = new RTCPeerConnection();
-                localStream = navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 document.getElementById('localVideo').srcObject = localStream;
                 localStream.getTracks().forEach(track => peer.addTrack(track, localStream));
                 peer.ontrack = (event) => document.getElementById('remoteVideo').srcObject = event.streams[0];
@@ -211,14 +213,16 @@
                         socket.send(JSON.stringify({ type: 'webrtc_signal', signal: event.candidate, to: msg.sender_id, room: msg.room }));
                     }
                 };
-                peer.setRemoteDescription(new RTCSessionDescription(msg.signal));
-                const answer = peer.createAnswer();
-                peer.setLocalDescription(answer);
+            }
+            if (msg.signal.type === 'offer') {
+                await peer.setRemoteDescription(new RTCSessionDescription(msg.signal));
+                const answer = await peer.createAnswer();
+                await peer.setLocalDescription(answer);
                 socket.send(JSON.stringify({ type: 'webrtc_signal', signal: answer, to: msg.sender_id, room: msg.room }));
             } else if (msg.signal.type === 'answer') {
-                peer.setRemoteDescription(new RTCSessionDescription(msg.signal));
+                await peer.setRemoteDescription(new RTCSessionDescription(msg.signal));
             } else {
-                peer.addIceCandidate(new RTCIceCandidate(msg.signal));
+                await peer.addIceCandidate(new RTCIceCandidate(msg.signal));
             }
         }
 
@@ -227,13 +231,7 @@
             window.location.href = '/';
         }
 
-        window.onload = () => {
-            if (!token) {
-                window.location.href = '/';
-            } else {
-                loadDashboard();
-            }
-        };
+        window.onload = loadDashboard;
     </script>
 </body>
 </html>

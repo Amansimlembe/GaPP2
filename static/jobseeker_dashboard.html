@@ -37,7 +37,7 @@
             <div id="groupList"></div>
         </div>
         <div class="main">
-            <h3>Jobs</h3>
+            <h3>Matching Jobs</h3>
             <div id="jobList"></div>
             <h3>Chat</h3>
             <div id="messages" class="chat-area"></div>
@@ -47,7 +47,7 @@
                 <button onclick="sendMessage('text')">Send Text</button>
                 <button onclick="sendMessage('media')">Send Media</button>
             </div>
-            <h3>Video Call</h3>
+            <h3>Video Interview</h3>
             <video id="localVideo" autoplay muted></video>
             <video id="remoteVideo" autoplay></video>
             <button onclick="startVideoCall()">Start Call</button>
@@ -57,34 +57,38 @@
     <script>
         const token = localStorage.getItem('token');
         const userId = parseInt(localStorage.getItem('userId'));
-        let socket, peer, localStream;
+        let socket, peer, localStream, cvSkills = [];
 
         async function loadDashboard() {
+            if (!token || !userId) {
+                window.location.href = '/';
+                return;
+            }
+            const headers = { 'Authorization': `Bearer ${token}` };
             try {
-                const headers = { 'Authorization': `Bearer ${token}` };
-                const jobsResp = await fetch('/jobs/ai_fetched', { headers });
-                if (!jobsResp.ok) throw new Error('Failed to fetch AI jobs');
-                const aiJobs = await jobsResp.json();
+                // Fetch AI jobs
+                const aiJobsResp = await fetch('/jobs/ai_fetched', { headers });
+                if (!aiJobsResp.ok) throw new Error('Failed to fetch AI jobs');
+                const aiJobs = await aiJobsResp.json();
 
+                // Fetch employer jobs
                 const employerJobsResp = await fetch('/jobseeker/dashboard', { headers });
-                if (!employerJobsResp.ok) {
-                    const errorData = await employerJobsResp.json();
-                    throw new Error(errorData.detail || 'Failed to fetch employer jobs');
-                }
+                if (!employerJobsResp.ok) throw new Error((await employerJobsResp.json()).detail);
                 const employerJobs = (await employerJobsResp.json()).jobs;
-                const allJobs = [...employerJobs, ...aiJobs];
 
-                const skills = 'Python'; // Placeholder until CV endpoint is fixed
+                // Combine and match jobs with CV skills
+                const allJobs = [...employerJobs, ...aiJobs];
                 document.getElementById('jobList').innerHTML = allJobs
-                    .filter(job => job.requirements.includes(skills) || true)
+                    .filter(job => cvSkills.some(skill => job.requirements.includes(skill)) || true) // Match CV skills
                     .map(job => `
                         <div class="job-card">
                             <h4>${job.title}</h4>
                             <p>${job.description}</p>
-                            <button onclick="applyForJob(${job._id})">Apply</button>
+                            <button onclick="applyForJob(${job.id || job._id})">Apply</button>
                         </div>
                     `).join('');
 
+                // Initialize WebSocket for real-time chat
                 socket = new WebSocket(`wss://${window.location.host}/ws/${userId}`);
                 socket.onmessage = (event) => {
                     const msg = JSON.parse(event.data);
@@ -96,11 +100,8 @@
                 loadGroups();
             } catch (error) {
                 console.error('Dashboard load error:', error.message);
-                if (error.message.includes('Not authenticated')) {
-                    window.location.href = '/';
-                } else {
-                    alert('Failed to load dashboard: ' + error.message);
-                }
+                if (error.message.includes('Not authenticated')) window.location.href = '/';
+                else alert('Error: ' + error.message);
             }
         }
 
@@ -109,7 +110,7 @@
             if (!resp.ok) throw new Error('Failed to fetch chat list');
             const chats = await resp.json();
             document.getElementById('chatList').innerHTML = chats.map(chat => `
-                <div class="chat-card" onclick="loadMessages(${chat.user_id})">${chat.email || chat.company_name} (${chat.unread})</div>
+                <div class="chat-card" onclick="loadMessages(${chat.user_id})">${chat.email} (${chat.unread})</div>
             `).join('');
         }
 
@@ -118,7 +119,7 @@
             if (!resp.ok) throw new Error('Failed to fetch groups');
             const groups = await resp.json();
             document.getElementById('groupList').innerHTML = groups.map(group => `
-                <div class="chat-card" onclick="loadGroupMessages(${group._id})">${group.name}</div>
+                           <div class="chat-card" onclick="loadGroupMessages(${group.id})">${group.name}</div>
             `).join('');
         }
 
@@ -143,30 +144,28 @@
             if (msg.message_type === 'image') return `<p><img src="${msg.content}" style="max-width: 200px;"></p>`;
             if (msg.message_type === 'audio') return `<p><audio controls src="${msg.content}"></audio></p>`;
             if (msg.message_type === 'video') return `<p><video controls src="${msg.content}" style="max-width: 200px;"></video></p>`;
+            return `<p>${msg.sender_id === userId ? 'You' : 'Them'}: [Unsupported format]</p>`;
         }
 
         async function sendMessage(type) {
             const target = localStorage.getItem('chatTarget');
             if (!target) return alert('Select a chat first');
+            const msg = {
+                recipient_id: target.startsWith('group_') ? null : parseInt(target),
+                group_id: target.startsWith('group_') ? parseInt(target.split('_')[1]) : null,
+                message_type: type
+            };
             if (type === 'text') {
-                const content = document.getElementById('messageInput').value;
-                socket.send(JSON.stringify({
-                    recipient_id: target.startsWith('group_') ? null : parseInt(target),
-                    group_id: target.startsWith('group_') ? parseInt(target.split('_')[1]) : null,
-                    message_type: 'text',
-                    content
-                }));
+                msg.content = document.getElementById('messageInput').value;
+                socket.send(JSON.stringify(msg));
                 document.getElementById('messageInput').value = '';
             } else {
                 const file = document.getElementById('mediaInput').files[0];
                 const reader = new FileReader();
                 reader.onload = () => {
-                    socket.send(JSON.stringify({
-                        recipient_id: target.startsWith('group_') ? null : parseInt(target),
-                        group_id: target.startsWith('group_') ? parseInt(target.split('_')[1]) : null,
-                        message_type: file.type.split('/')[0],
-                        content: reader.result
-                    }));
+                    msg.message_type = file.type.split('/')[0];
+                    msg.content = reader.result;
+                    socket.send(JSON.stringify(msg));
                 };
                 reader.readAsDataURL(file);
             }
@@ -174,10 +173,12 @@
 
         function appendMessage(msg) {
             document.getElementById('messages').innerHTML += renderMessage(msg);
+            document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
         }
 
         async function uploadCV() {
             const file = document.getElementById('cvInput').files[0];
+            if (!file) return alert('Select a CV file');
             const formData = new FormData();
             formData.append('cv', file);
             const resp = await fetch('/jobseeker/update_cv', {
@@ -188,6 +189,22 @@
             if (!resp.ok) throw new Error('Failed to upload CV');
             const data = await resp.json();
             alert(data.message);
+
+            // AI CV Enhancement (placeholder using pdf.js)
+            const reader = new FileReader();
+            reader.onload = async () => {
+                const pdf = await pdfjsLib.getDocument({ data: reader.result }).promise;
+                let text = '';
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const content = await page.getTextContent();
+                    text += content.items.map(item => item.str).join(' ');
+                }
+                cvSkills = text.match(/Python|JavaScript|Java|C\+\+|SQL|HTML|CSS/gi) || ['Python']; // Basic skill extraction
+                console.log('Extracted skills:', cvSkills);
+                loadDashboard(); // Reload jobs with updated skills
+            };
+            reader.readAsArrayBuffer(file);
         }
 
         async function applyForJob(jobId) {
@@ -196,7 +213,7 @@
                 headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ job_id: jobId })
             });
-            if (!resp.ok) throw new Error('Failed to apply for job');
+            if (!resp.ok) throw new Error('Failed to apply');
             alert((await resp.json()).message);
         }
 
@@ -209,7 +226,7 @@
                 body: new URLSearchParams({ name, members })
             });
             if (!resp.ok) throw new Error('Failed to create group');
-            alert((await resp.json()).message);
+            alert('Group created');
             loadGroups();
         }
 
@@ -231,10 +248,10 @@
             socket.send(JSON.stringify({ type: 'webrtc_signal', signal: offer, to: target, room: `${userId}-${target}` }));
         }
 
-        function handleSignal(msg) {
-            if (msg.signal.type === 'offer') {
+        async function handleSignal(msg) {
+            if (!peer) {
                 peer = new RTCPeerConnection();
-                localStream = navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 document.getElementById('localVideo').srcObject = localStream;
                 localStream.getTracks().forEach(track => peer.addTrack(track, localStream));
                 peer.ontrack = (event) => document.getElementById('remoteVideo').srcObject = event.streams[0];
@@ -243,14 +260,16 @@
                         socket.send(JSON.stringify({ type: 'webrtc_signal', signal: event.candidate, to: msg.sender_id, room: msg.room }));
                     }
                 };
-                peer.setRemoteDescription(new RTCSessionDescription(msg.signal));
-                const answer = peer.createAnswer();
-                peer.setLocalDescription(answer);
+            }
+            if (msg.signal.type === 'offer') {
+                await peer.setRemoteDescription(new RTCSessionDescription(msg.signal));
+                const answer = await peer.createAnswer();
+                await peer.setLocalDescription(answer);
                 socket.send(JSON.stringify({ type: 'webrtc_signal', signal: answer, to: msg.sender_id, room: msg.room }));
             } else if (msg.signal.type === 'answer') {
-                peer.setRemoteDescription(new RTCSessionDescription(msg.signal));
+                await peer.setRemoteDescription(new RTCSessionDescription(msg.signal));
             } else {
-                peer.addIceCandidate(new RTCIceCandidate(msg.signal));
+                await peer.addIceCandidate(new RTCIceCandidate(msg.signal));
             }
         }
 
@@ -259,13 +278,7 @@
             window.location.href = '/';
         }
 
-        window.onload = () => {
-            if (!token) {
-                window.location.href = '/';
-            } else {
-                loadDashboard();
-            }
-        };
+        window.onload = loadDashboard;
     </script>
 </body>
 </html>
