@@ -61,17 +61,22 @@
 
         async function loadDashboard() {
             try {
-                const jobsResp = await fetch('/jobs/ai_fetched', { headers: { 'Authorization': `Bearer ${token}` } });
+                const headers = { 'Authorization': `Bearer ${token}` };
+                const jobsResp = await fetch('/jobs/ai_fetched', { headers });
+                if (!jobsResp.ok) throw new Error('Failed to fetch AI jobs');
                 const aiJobs = await jobsResp.json();
-                const employerJobsResp = await fetch('/jobseeker/dashboard', { headers: { 'Authorization': `Bearer ${token}` } });
-                if (!employerJobsResp.ok) throw new Error((await employerJobsResp.json()).detail || 'Failed to fetch employer jobs');
+
+                const employerJobsResp = await fetch('/jobseeker/dashboard', { headers });
+                if (!employerJobsResp.ok) {
+                    const errorData = await employerJobsResp.json();
+                    throw new Error(errorData.detail || 'Failed to fetch employer jobs');
+                }
                 const employerJobs = (await employerJobsResp.json()).jobs;
                 const allJobs = [...employerJobs, ...aiJobs];
-                const jobSeekerResp = await fetch('/jobseeker/update_cv', { headers: { 'Authorization': `Bearer ${token}` }, method: 'GET' });
-                const jobSeeker = jobSeekerResp.ok ? await jobSeekerResp.json() : { skills: '' };
-                const skills = jobSeeker.skills || '';
+
+                const skills = 'Python'; // Placeholder until CV endpoint is fixed
                 document.getElementById('jobList').innerHTML = allJobs
-                    .filter(job => job.requirements.includes(skills.split(',')[0]) || true)
+                    .filter(job => job.requirements.includes(skills) || true)
                     .map(job => `
                         <div class="job-card">
                             <h4>${job.title}</h4>
@@ -90,12 +95,18 @@
                 loadChatList();
                 loadGroups();
             } catch (error) {
-                alert('Failed to load dashboard: ' + error.message);
+                console.error('Dashboard load error:', error.message);
+                if (error.message.includes('Not authenticated')) {
+                    window.location.href = '/';
+                } else {
+                    alert('Failed to load dashboard: ' + error.message);
+                }
             }
         }
 
         async function loadChatList() {
             const resp = await fetch('/chat_list', { headers: { 'Authorization': `Bearer ${token}` } });
+            if (!resp.ok) throw new Error('Failed to fetch chat list');
             const chats = await resp.json();
             document.getElementById('chatList').innerHTML = chats.map(chat => `
                 <div class="chat-card" onclick="loadMessages(${chat.user_id})">${chat.email || chat.company_name} (${chat.unread})</div>
@@ -104,6 +115,7 @@
 
         async function loadGroups() {
             const resp = await fetch('/groups', { headers: { 'Authorization': `Bearer ${token}` } });
+            if (!resp.ok) throw new Error('Failed to fetch groups');
             const groups = await resp.json();
             document.getElementById('groupList').innerHTML = groups.map(group => `
                 <div class="chat-card" onclick="loadGroupMessages(${group._id})">${group.name}</div>
@@ -113,6 +125,7 @@
         async function loadMessages(recipientId) {
             localStorage.setItem('chatTarget', recipientId);
             const resp = await fetch(`/messages/${recipientId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+            if (!resp.ok) throw new Error('Failed to fetch messages');
             const messages = await resp.json();
             document.getElementById('messages').innerHTML = messages.map(m => renderMessage(m)).join('');
         }
@@ -120,6 +133,7 @@
         async function loadGroupMessages(groupId) {
             localStorage.setItem('chatTarget', `group_${groupId}`);
             const resp = await fetch(`/messages/group/${groupId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+            if (!resp.ok) throw new Error('Failed to fetch group messages');
             const messages = await resp.json();
             document.getElementById('messages').innerHTML = messages.map(m => renderMessage(m)).join('');
         }
@@ -171,6 +185,7 @@
                 headers: { 'Authorization': `Bearer ${token}` },
                 body: formData
             });
+            if (!resp.ok) throw new Error('Failed to upload CV');
             const data = await resp.json();
             alert(data.message);
         }
@@ -181,6 +196,7 @@
                 headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ job_id: jobId })
             });
+            if (!resp.ok) throw new Error('Failed to apply for job');
             alert((await resp.json()).message);
         }
 
@@ -192,6 +208,7 @@
                 headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: new URLSearchParams({ name, members })
             });
+            if (!resp.ok) throw new Error('Failed to create group');
             alert((await resp.json()).message);
             loadGroups();
         }
@@ -242,7 +259,13 @@
             window.location.href = '/';
         }
 
-        window.onload = () => token ? loadDashboard() : window.location.href = '/';
+        window.onload = () => {
+            if (!token) {
+                window.location.href = '/';
+            } else {
+                loadDashboard();
+            }
+        };
     </script>
 </body>
 </html>

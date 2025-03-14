@@ -77,8 +77,12 @@
 
         async function loadDashboard() {
             try {
-                const resp = await fetch('/employer/dashboard', { headers: { 'Authorization': `Bearer ${token}` } });
-                if (!resp.ok) throw new Error((await resp.json()).detail || 'Failed to load dashboard');
+                const headers = { 'Authorization': `Bearer ${token}` };
+                const resp = await fetch('/employer/dashboard', { headers });
+                if (!resp.ok) {
+                    const errorData = await resp.json();
+                    throw new Error(errorData.detail || 'Failed to load dashboard');
+                }
                 const data = await resp.json();
                 document.getElementById('jobList').innerHTML = data.jobs.map(job => `
                     <div class="job-card">
@@ -102,12 +106,18 @@
 
                 loadChatList();
             } catch (error) {
-                alert('Failed to load dashboard: ' + error.message);
+                console.error('Dashboard load error:', error.message);
+                if (error.message.includes('Not authenticated')) {
+                    window.location.href = '/';
+                } else {
+                    alert('Failed to load dashboard: ' + error.message);
+                }
             }
         }
 
         async function loadChatList() {
             const resp = await fetch('/chat_list', { headers: { 'Authorization': `Bearer ${token}` } });
+            if (!resp.ok) throw new Error('Failed to fetch chat list');
             const chats = await resp.json();
             document.getElementById('chatList').innerHTML = chats.map(chat => `
                 <div class="chat-card" onclick="loadMessages(${chat.user_id})">${chat.email || chat.company_name} (${chat.unread})</div>
@@ -117,6 +127,7 @@
         async function loadMessages(recipientId) {
             localStorage.setItem('chatTarget', recipientId);
             const resp = await fetch(`/messages/${recipientId}`, { headers: { 'Authorization': `Bearer ${token}` } });
+            if (!resp.ok) throw new Error('Failed to fetch messages');
             const messages = await resp.json();
             document.getElementById('messages').innerHTML = messages.map(m => renderMessage(m)).join('');
         }
@@ -165,6 +176,7 @@
                 headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify(job)
             });
+            if (!resp.ok) throw new Error('Failed to post job');
             alert((await resp.json()).message);
             loadDashboard();
         });
@@ -215,7 +227,13 @@
             window.location.href = '/';
         }
 
-        window.onload = () => token ? loadDashboard() : window.location.href = '/';
+        window.onload = () => {
+            if (!token) {
+                window.location.href = '/';
+            } else {
+                loadDashboard();
+            }
+        };
     </script>
 </body>
 </html>

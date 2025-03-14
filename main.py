@@ -100,8 +100,11 @@ def get_password_hash(password):
 
 def create_access_token(data: dict):
     try:
-        token = jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
-        logger.info(f"Token created for user_id: {data['sub']}")
+        # Ensure 'sub' is a string
+        payload = data.copy()
+        payload["sub"] = str(payload["sub"])
+        token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+        logger.info(f"Token created for user_id: {payload['sub']}")
         return token
     except Exception as e:
         logger.error(f"Token creation failed: {e}")
@@ -130,7 +133,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
         while True:
             data = await websocket.receive_json()
             if "type" in data and data["type"] == "webrtc_signal":
-                room = str(data["room"])  # Ensure room is a string
+                room = str(data["room"])
                 if room not in webrtc_signals:
                     webrtc_signals[room] = []
                 webrtc_signals[room].append(data["signal"])
@@ -168,8 +171,10 @@ async def register(user: User):
     try:
         logger.info(f"Attempting to register user with email: {user.email}")
         if users_collection.find_one({"email": user.email}):
+            logger.warning(f"Duplicate email detected: {user.email}")
             raise HTTPException(status_code=400, detail="Email already exists")
         if users_collection.find_one({"phone_number": user.phone_number}):
+            logger.warning(f"Duplicate phone number detected: {user.phone_number}")
             raise HTTPException(status_code=400, detail="Phone number already exists")
         
         hashed_password = get_password_hash(user.password)
@@ -188,9 +193,13 @@ async def register(user: User):
         
         token = create_access_token({"sub": str(user_id)})
         logger.info(f"User {user_id} registered successfully")
-        return {"access_token": token, "role": user.role, "user_id": user_id}
+        return {
+            "access_token": token,
+            "role": user.role,
+            "user_id": user_id,
+            "message": "User registered successfully"
+        }
     except HTTPException as he:
-        logger.warning(f"Registration failed: {he.detail}")
         raise he
     except Exception as e:
         logger.error(f"Registration failed with error: {str(e)}")
