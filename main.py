@@ -11,7 +11,6 @@ import os
 from passlib.context import CryptContext
 import uvicorn
 from dotenv import load_dotenv
-import base64
 import requests
 import logging
 
@@ -102,6 +101,7 @@ def get_password_hash(password):
 def create_access_token(data: dict):
     try:
         token = jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
+        logger.info(f"Token created for user_id: {data['sub']}")
         return token
     except Exception as e:
         logger.error(f"Token creation failed: {e}")
@@ -117,7 +117,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         return user
     except Exception as e:
         logger.error(f"Token validation failed: {e}")
-        raise HTTPException(status_code=401, detail="Invalid token")
+        raise HTTPException(status_code=401, detail="Not authenticated")
 
 active_connections: Dict[int, WebSocket] = {}
 webrtc_signals: Dict[str, list] = {}
@@ -130,7 +130,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
         while True:
             data = await websocket.receive_json()
             if "type" in data and data["type"] == "webrtc_signal":
-                room = data["room"]
+                room = str(data["room"])  # Ensure room is a string
                 if room not in webrtc_signals:
                     webrtc_signals[room] = []
                 webrtc_signals[room].append(data["signal"])
@@ -144,7 +144,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
                     "group_id": data.get("group_id"),
                     "message_type": data.get("message_type", "text"),
                     "content": data["content"],
-                    "sent_at": datetime.datetime.now(datetime.timezone.utc).isoformat()  # Ensure string format
+                    "sent_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
                 }
                 messages_collection.insert_one(message)
                 if message["recipient_id"]:
@@ -166,25 +166,34 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
 @app.post("/register")
 async def register(user: User):
     try:
+        logger.info(f"Attempting to register user with email: {user.email}")
         if users_collection.find_one({"email": user.email}):
             raise HTTPException(status_code=400, detail="Email already exists")
         if users_collection.find_one({"phone_number": user.phone_number}):
             raise HTTPException(status_code=400, detail="Phone number already exists")
+        
         hashed_password = get_password_hash(user.password)
         user_dict = user.dict()
         user_dict["password"] = hashed_password
         last_user = users_collection.find_one(sort=[("_id", -1)])
-        user_dict["_id"] = (last_user["_id"] + 1) if last_user else 1
+        user_id = (last_user["_id"] + 1) if last_user else 1
+        user_dict["_id"] = user_id
+        
+        logger.info(f"Inserting user with ID: {user_id}")
         users_collection.insert_one(user_dict)
+        
         if user.role == 0:
-            jobseekers_collection.insert_one({"_id": user_dict["_id"], "email": user.email})
-        token = create_access_token({"sub": str(user_dict["_id"])})  # Explicitly convert to string
-        logger.info(f"User registered: {user_dict['_id']}")
-        return {"access_token": token, "role": user.role, "user_id": user_dict["_id"]}
+            logger.info(f"Registering jobseeker with ID: {user_id}")
+            jobseekers_collection.insert_one({"_id": user_id, "email": user.email})
+        
+        token = create_access_token({"sub": str(user_id)})
+        logger.info(f"User {user_id} registered successfully")
+        return {"access_token": token, "role": user.role, "user_id": user_id}
     except HTTPException as he:
+        logger.warning(f"Registration failed: {he.detail}")
         raise he
     except Exception as e:
-        logger.error(f"Registration failed: {e}")
+        logger.error(f"Registration failed with error: {str(e)}")
         return JSONResponse(status_code=500, content={"detail": f"Internal server error: {str(e)}"})
 
 @app.post("/token")
@@ -193,7 +202,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         user = users_collection.find_one({"$or": [{"email": form_data.username}, {"phone_number": form_data.username}]})
         if not user or not verify_password(form_data.password, user["password"]):
             raise HTTPException(status_code=401, detail="Invalid credentials")
-        token = create_access_token({"sub": str(user["_id"])})  # Explicitly convert to string
+        token = create_access_token({"sub": str(user["_id"])})
         return {"access_token": token, "role": user["role"], "user_id": user["_id"]}
     except Exception as e:
         logger.error(f"Login failed: {e}")
@@ -216,7 +225,7 @@ async def ai_fetched_jobs():
         if response.status_code == 200:
             jobs = response.json()
             return [{"title": job["name"], "description": "Sample job", "requirements": "N/A", "deadline": "N/A", "employer_email": "ai@example.com"} for job in jobs[:5]]
-        return [{"title": "AI Job " + str(i), "description": "Sample AI job", "requirements": "N/A", "deadline": "N/A", "employer_email": "ai@example.com"} for i in range(1, 6)]
+        return [{"title": f"AI Job {i}", "description": "Sample AI job", "requirements": "N/A", "deadline": "N/A", "employer_email": "ai@example.com"} for i in range(1, 6)]
     except Exception as e:
         logger.error(f"AI job fetch failed: {e}")
         return []
@@ -278,7 +287,10 @@ async def jobseeker_dashboard(current_user: dict = Depends(get_current_user)):
     if current_user["role"] != 0:
         raise HTTPException(status_code=403, detail="Not authorized")
     jobs = list(jobs_collection.find({"status": "active"}))
-    return {"user_id": current_user["_id"], "jobs": [{k: str(v) if isinstance(v, datetime.datetime) else v for k, v in job.items()} for job in jobs]}
+    return {
+        "user_id": current_user["_id"],
+        "jobs": [{k: str(v) if isinstance(v, datetime.datetime) else v for k, v in job.items()} for job in jobs]
+    }
 
 @app.get("/employer/dashboard")
 async def employer_dashboard(current_user: dict = Depends(get_current_user)):

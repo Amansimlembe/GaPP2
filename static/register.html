@@ -60,11 +60,16 @@
                     body: JSON.stringify({ email, phone_number, password, role })
                 });
                 const data = await response.json();
-                if (!response.ok) throw new Error(data.detail || 'Registration failed');
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Registration failed');
+                }
                 localStorage.setItem('token', data.access_token);
                 localStorage.setItem('userId', data.user_id);
-                window.location.href = `/dashboard/${data.role === 0 ? 'jobseeker' : 'employer'}`;
+                const redirectUrl = `/dashboard/${data.role === 0 ? 'jobseeker' : 'employer'}`;
+                console.log(`Redirecting to: ${redirectUrl}`);
+                window.location.href = redirectUrl;
             } catch (error) {
+                console.error('Registration error:', error.message);
                 alert(error.message);
             }
         });
