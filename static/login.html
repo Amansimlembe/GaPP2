@@ -40,16 +40,20 @@
             e.preventDefault();
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
-            const response = await fetch('/token', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: new URLSearchParams({ username, password })
-            });
-            const data = await response.json();
-            if (!response.ok) return alert(data.detail || 'Login failed');
-            localStorage.setItem('token', data.access_token);
-            localStorage.setItem('userId', data.user_id);
-            window.location.href = `/dashboard/${data.role === 0 ? 'jobseeker' : 'employer'}`;
+            try {
+                const response = await fetch('/token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ username, password })
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail || 'Login failed');
+                localStorage.setItem('token', data.access_token);
+                localStorage.setItem('userId', data.user_id);
+                window.location.href = `/dashboard/${data.role === 0 ? 'jobseeker' : 'employer'}`;
+            } catch (error) {
+                alert(error.message);
+            }
         });
     </script>
 </body>

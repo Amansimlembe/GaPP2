@@ -76,29 +76,34 @@
         let socket, peer, localStream;
 
         async function loadDashboard() {
-            const resp = await fetch('/employer/dashboard', { headers: { 'Authorization': `Bearer ${token}` } });
-            const data = await resp.json();
-            document.getElementById('jobList').innerHTML = data.jobs.map(job => `
-                <div class="job-card">
-                    <h4>${job.title}</h4>
-                    <p>${job.description}</p>
-                </div>
-            `).join('');
-            document.getElementById('applications').innerHTML = data.applications.map(app => `
-                <div class="app-card">
-                    <h4>${app.job[0]?.title || 'Unknown'}</h4>
-                    <p>Applicant: ${app.jobseeker[0]?.email || 'Unknown'}</p>
-                </div>
-            `).join('');
+            try {
+                const resp = await fetch('/employer/dashboard', { headers: { 'Authorization': `Bearer ${token}` } });
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.detail || 'Failed to load dashboard');
+                document.getElementById('jobList').innerHTML = data.jobs.map(job => `
+                    <div class="job-card">
+                        <h4>${job.title}</h4>
+                        <p>${job.description}</p>
+                    </div>
+                `).join('');
+                document.getElementById('applications').innerHTML = data.applications.map(app => `
+                    <div class="app-card">
+                        <h4>${app.job[0]?.title || 'Unknown'}</h4>
+                        <p>Applicant: ${app.jobseeker[0]?.email || 'Unknown'}</p>
+                    </div>
+                `).join('');
 
-            socket = new WebSocket(`wss://${window.location.host}/ws/${userId}`);
-            socket.onmessage = (event) => {
-                const msg = JSON.parse(event.data);
-                if (msg.type === 'webrtc_signal') handleSignal(msg);
-                else appendMessage(msg);
-            };
+                socket = new WebSocket(`wss://${window.location.host}/ws/${userId}`);
+                socket.onmessage = (event) => {
+                    const msg = JSON.parse(event.data);
+                    if (msg.type === 'webrtc_signal') handleSignal(msg);
+                    else appendMessage(msg);
+                };
 
-            loadChatList();
+                loadChatList();
+            } catch (error) {
+                alert('Failed to load dashboard: ' + error.message);
+            }
         }
 
         async function loadChatList() {

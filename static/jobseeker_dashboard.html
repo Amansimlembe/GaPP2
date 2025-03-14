@@ -60,32 +60,37 @@
         let socket, peer, localStream;
 
         async function loadDashboard() {
-            const jobsResp = await fetch('/jobs/ai_fetched', { headers: { 'Authorization': `Bearer ${token}` } });
-            const aiJobs = await jobsResp.json();
-            const employerJobsResp = await fetch('/jobseeker/dashboard', { headers: { 'Authorization': `Bearer ${token}` } });
-            const employerJobs = (await employerJobsResp.json()).jobs;
-            const allJobs = [...employerJobs, ...aiJobs];
-            const jobSeeker = await (await fetch('/jobseeker/update_cv', { headers: { 'Authorization': `Bearer ${token}` } })).json();
-            const skills = jobSeeker.skills || '';
-            document.getElementById('jobList').innerHTML = allJobs
-                .filter(job => job.requirements.includes(skills.split(',')[0]) || true) // Basic matching
-                .map(job => `
-                    <div class="job-card">
-                        <h4>${job.title}</h4>
-                        <p>${job.description}</p>
-                        <button onclick="applyForJob(${job._id})">Apply</button>
-                    </div>
-                `).join('');
+            try {
+                const jobsResp = await fetch('/jobs/ai_fetched', { headers: { 'Authorization': `Bearer ${token}` } });
+                const aiJobs = await jobsResp.json();
+                const employerJobsResp = await fetch('/jobseeker/dashboard', { headers: { 'Authorization': `Bearer ${token}` } });
+                const employerJobs = (await employerJobsResp.json()).jobs;
+                const allJobs = [...employerJobs, ...aiJobs];
+                const jobSeekerResp = await fetch('/jobseeker/update_cv', { headers: { 'Authorization': `Bearer ${token}` }, method: 'GET' });
+                const jobSeeker = await jobSeekerResp.json();
+                const skills = jobSeeker.skills || '';
+                document.getElementById('jobList').innerHTML = allJobs
+                    .filter(job => job.requirements.includes(skills.split(',')[0]) || true)
+                    .map(job => `
+                        <div class="job-card">
+                            <h4>${job.title}</h4>
+                            <p>${job.description}</p>
+                            <button onclick="applyForJob(${job._id})">Apply</button>
+                        </div>
+                    `).join('');
 
-            socket = new WebSocket(`wss://${window.location.host}/ws/${userId}`);
-            socket.onmessage = (event) => {
-                const msg = JSON.parse(event.data);
-                if (msg.type === 'webrtc_signal') handleSignal(msg);
-                else appendMessage(msg);
-            };
+                socket = new WebSocket(`wss://${window.location.host}/ws/${userId}`);
+                socket.onmessage = (event) => {
+                    const msg = JSON.parse(event.data);
+                    if (msg.type === 'webrtc_signal') handleSignal(msg);
+                    else appendMessage(msg);
+                };
 
-            loadChatList();
-            loadGroups();
+                loadChatList();
+                loadGroups();
+            } catch (error) {
+                alert('Failed to load dashboard: ' + error.message);
+            }
         }
 
         async function loadChatList() {

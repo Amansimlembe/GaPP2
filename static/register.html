@@ -53,16 +53,20 @@
             const phone_number = document.getElementById('phone_number').value;
             const password = document.getElementById('password').value;
             const role = parseInt(document.getElementById('role').value);
-            const response = await fetch('/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, phone_number, password, role })
-            });
-            const data = await response.json();
-            if (!response.ok) return alert(data.detail || 'Registration failed');
-            localStorage.setItem('token', data.access_token);
-            localStorage.setItem('userId', data.user_id);
-            window.location.href = `/dashboard/${data.role === 0 ? 'jobseeker' : 'employer'}`;
+            try {
+                const response = await fetch('/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, phone_number, password, role })
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.detail || 'Registration failed');
+                localStorage.setItem('token', data.access_token);
+                localStorage.setItem('userId', data.user_id);
+                window.location.href = `/dashboard/${data.role === 0 ? 'jobseeker' : 'employer'}`;
+            } catch (error) {
+                alert(error.message);
+            }
         });
     </script>
 </body>

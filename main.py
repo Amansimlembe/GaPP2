@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, WebSocket, Depends, UploadFile, File, Form
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from pymongo import MongoClient
 from pydantic import BaseModel
 from typing import Optional, Dict
@@ -12,15 +12,20 @@ from passlib.context import CryptContext
 import uvicorn
 from dotenv import load_dotenv
 import base64
-import requests  # For AI job fetching simulation
+import requests
+import logging
 
 load_dotenv()
+
+# Logging setup
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust for production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -31,7 +36,9 @@ try:
     client = MongoClient(MONGO_URI)
     db = client["jobseeker_app"]
     client.admin.command('ping')
+    logger.info("MongoDB connected successfully")
 except Exception as e:
+    logger.error(f"MongoDB connection failed: {e}")
     raise Exception(f"MongoDB connection failed: {e}")
 
 users_collection = db["users"]
@@ -104,7 +111,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         if not user:
             raise HTTPException(status_code=401, detail="Invalid token")
         return user
-    except:
+    except Exception as e:
+        logger.error(f"Token validation failed: {e}")
         raise HTTPException(status_code=401, detail="Invalid token")
 
 active_connections: Dict[int, WebSocket] = {}
@@ -145,32 +153,46 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
                             await active_connections[member].send_json(message)
                 await websocket.send_json(message)
     except Exception as e:
-        print(f"WebSocket error: {e}")
+        logger.error(f"WebSocket error: {e}")
     finally:
-        del active_connections[user_id]
+        if user_id in active_connections:
+            del active_connections[user_id]
 
 @app.post("/register")
 async def register(user: User):
-    if users_collection.find_one({"email": user.email}) or users_collection.find_one({"phone_number": user.phone_number}):
-        raise HTTPException(status_code=400, detail="Email or phone number already exists")
-    hashed_password = get_password_hash(user.password)
-    user_dict = user.dict()
-    user_dict["password"] = hashed_password
-    last_user = users_collection.find_one(sort=[("_id", -1)])
-    user_dict["_id"] = (last_user["_id"] + 1) if last_user else 1
-    users_collection.insert_one(user_dict)
-    if user.role == 0:
-        jobseekers_collection.insert_one({"_id": user_dict["_id"], "email": user.email})
-    token = create_access_token({"sub": str(user_dict["_id"])})
-    return {"access_token": token, "role": user.role, "user_id": user_dict["_id"]}
+    try:
+        if users_collection.find_one({"email": user.email}):
+            raise HTTPException(status_code=400, detail="Email already exists")
+        if users_collection.find_one({"phone_number": user.phone_number}):
+            raise HTTPException(status_code=400, detail="Phone number already exists")
+        hashed_password = get_password_hash(user.password)
+        user_dict = user.dict()
+        user_dict["password"] = hashed_password
+        last_user = users_collection.find_one(sort=[("_id", -1)])
+        user_dict["_id"] = (last_user["_id"] + 1) if last_user else 1
+        users_collection.insert_one(user_dict)
+        if user.role == 0:
+            jobseekers_collection.insert_one({"_id": user_dict["_id"], "email": user.email})
+        token = create_access_token({"sub": str(user_dict["_id"])})
+        logger.info(f"User registered: {user_dict['_id']}")
+        return {"access_token": token, "role": user.role, "user_id": user_dict["_id"]}
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Registration failed: {e}")
+        return JSONResponse(status_code=500, content={"detail": f"Internal server error: {str(e)}"})
 
 @app.post("/token")
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = users_collection.find_one({"$or": [{"email": form_data.username}, {"phone_number": form_data.username}]})
-    if not user or not verify_password(form_data.password, user["password"]):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    token = create_access_token({"sub": str(user["_id"])})
-    return {"access_token": token, "role": user["role"], "user_id": user["_id"]}
+    try:
+        user = users_collection.find_one({"$or": [{"email": form_data.username}, {"phone_number": form_data.username}]})
+        if not user or not verify_password(form_data.password, user["password"]):
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        token = create_access_token({"sub": str(user["_id"])})
+        return {"access_token": token, "role": user["role"], "user_id": user["_id"]}
+    except Exception as e:
+        logger.error(f"Login failed: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/employer/post_job")
 async def post_job(job: Job, current_user: dict = Depends(get_current_user)):
@@ -184,12 +206,16 @@ async def post_job(job: Job, current_user: dict = Depends(get_current_user)):
 
 @app.get("/jobs/ai_fetched")
 async def ai_fetched_jobs():
-    # Simulate AI fetching (e.g., using a free API or mock data)
-    response = requests.get("https://api.github.com/repos/github/jobs/contents/sample_jobs.json")
-    if response.status_code == 200:
-        jobs = response.json()
-        return [{"title": job["name"], "description": "Sample job", "requirements": "N/A", "deadline": "N/A", "employer_email": "ai@example.com"} for job in jobs[:5]]
-    return [{"title": "AI Job " + str(i), "description": "Sample AI job", "requirements": "N/A", "deadline": "N/A", "employer_email": "ai@example.com"} for i in range(1, 6)]
+    try:
+        # Simulate AI job fetching
+        response = requests.get("https://api.github.com/repos/github/jobs/contents/sample_jobs.json")
+        if response.status_code == 200:
+            jobs = response.json()
+            return [{"title": job["name"], "description": "Sample job", "requirements": "N/A", "deadline": "N/A", "employer_email": "ai@example.com"} for job in jobs[:5]]
+        return [{"title": "AI Job " + str(i), "description": "Sample AI job", "requirements": "N/A", "deadline": "N/A", "employer_email": "ai@example.com"} for i in range(1, 6)]
+    except Exception as e:
+        logger.error(f"AI job fetch failed: {e}")
+        return []
 
 @app.post("/jobseeker/apply")
 async def apply_for_job(job_id: int, current_user: dict = Depends(get_current_user)):
@@ -209,8 +235,7 @@ async def update_cv(cv: UploadFile = File(...), current_user: dict = Depends(get
     os.makedirs("uploads", exist_ok=True)
     with open(cv_path, "wb") as f:
         f.write(await cv.read())
-    # Simulate AI enhancement (basic keyword extraction)
-    skills = "Python, JavaScript"  # Placeholder; use pdf.js in frontend for real extraction
+    skills = "Python, JavaScript"  # Placeholder
     jobseekers_collection.update_one(
         {"_id": current_user["_id"]},
         {"$set": {"cv_path": cv_path, "skills": skills}},
@@ -220,21 +245,87 @@ async def update_cv(cv: UploadFile = File(...), current_user: dict = Depends(get
 
 @app.post("/groups/create")
 async def create_group(name: str = Form(...), members: str = Form(...), current_user: dict = Depends(get_current_user)):
-    group_dict = {"name": name, "members": [current_user["_id"]] + [int(m) for m in members.split(",")]}
-    last_group = groups_collection.find_one(sort=[("_id", -1)])
-    group_dict["_id"] = (last_group["_id"] + 1) if last_group else 1
-    groups_collection.insert_one(group_dict)
-    return {"group_id": group_dict["_id"]}
+    try:
+        group_dict = {"name": name, "members": [current_user["_id"]] + [int(m) for m in members.split(",")]}
+        last_group = groups_collection.find_one(sort=[("_id", -1)])
+        group_dict["_id"] = (last_group["_id"] + 1) if last_group else 1
+        groups_collection.insert_one(group_dict)
+        return {"group_id": group_dict["_id"]}
+    except Exception as e:
+        logger.error(f"Group creation failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create group")
 
 @app.get("/dashboard/{role}", response_class=HTMLResponse)
 async def dashboard(role: str, current_user: dict = Depends(get_current_user)):
-    if role == "jobseeker" and current_user["role"] == 0:
-        with open("static/jobseeker_dashboard.html", "r") as f:
-            return HTMLResponse(content=f.read())
-    elif role == "employer" and current_user["role"] == 1:
-        with open("static/employer_dashboard.html", "r") as f:
-            return HTMLResponse(content=f.read())
-    raise HTTPException(status_code=403, detail="Not authorized")
+    try:
+        if role == "jobseeker" and current_user["role"] == 0:
+            with open("static/jobseeker_dashboard.html", "r") as f:
+                return HTMLResponse(content=f.read())
+        elif role == "employer" and current_user["role"] == 1:
+            with open("static/employer_dashboard.html", "r") as f:
+                return HTMLResponse(content=f.read())
+        raise HTTPException(status_code=403, detail="Not authorized")
+    except Exception as e:
+        logger.error(f"Dashboard load failed: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/jobseeker/dashboard")
+async def jobseeker_dashboard(current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != 0:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    jobs = list(jobs_collection.find({"status": "active"}))
+    return {"user_id": current_user["_id"], "jobs": jobs}
+
+@app.get("/employer/dashboard")
+async def employer_dashboard(current_user: dict = Depends(get_current_user)):
+    if current_user["role"] != 1:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    jobs = list(jobs_collection.find({"user_id": current_user["_id"]}))
+    applications = list(job_applications_collection.aggregate([
+        {"$lookup": {"from": "jobs", "localField": "job_id", "foreignField": "_id", "as": "job"}},
+        {"$lookup": {"from": "jobseekers", "localField": "user_id", "foreignField": "_id", "as": "jobseeker"}},
+        {"$match": {"job.user_id": current_user["_id"]}}
+    ]))
+    return {"user_id": current_user["_id"], "jobs": jobs, "applications": applications}
+
+@app.get("/chat_list")
+async def get_chat_list(current_user: dict = Depends(get_current_user)):
+    pipeline = [
+        {"$match": {"$or": [{"sender_id": current_user["_id"]}, {"recipient_id": current_user["_id"]}]}},
+        {"$group": {
+            "_id": {"$cond": [{"$eq": ["$sender_id", current_user["_id"]]}, "$recipient_id", "$sender_id"]},
+            "last_message": {"$max": "$sent_at"},
+            "unread": {"$sum": {"$cond": [{"$and": [{"$eq": ["$recipient_id", current_user["_id"]]}, {"$eq": ["$read_at", None]}]}, 1, 0]}}
+        }},
+        {"$lookup": {"from": "users", "localField": "_id", "foreignField": "_id", "as": "user"}},
+        {"$lookup": {"from": "jobs", "localField": "_id", "foreignField": "user_id", "as": "job"}},
+        {"$project": {
+            "user_id": "$_id",
+            "email": {"$arrayElemAt": ["$user.email", 0]},
+            "company_name": {"$arrayElemAt": ["$job.company_name", 0]},
+            "last_message": 1,
+            "unread": 1
+        }}
+    ]
+    return list(messages_collection.aggregate(pipeline))
+
+@app.get("/messages/{recipient_id}")
+async def get_messages(recipient_id: int, current_user: dict = Depends(get_current_user)):
+    messages = list(messages_collection.find({
+        "$or": [
+            {"sender_id": current_user["_id"], "recipient_id": recipient_id},
+            {"sender_id": recipient_id, "recipient_id": current_user["_id"]}
+        ]
+    }).sort("sent_at", 1))
+    return messages
+
+@app.get("/groups")
+async def get_groups(current_user: dict = Depends(get_current_user)):
+    return list(groups_collection.find({"members": current_user["_id"]}))
+
+@app.get("/messages/group/{group_id}")
+async def get_group_messages(group_id: int, current_user: dict = Depends(get_current_user)):
+    return list(messages_collection.find({"group_id": group_id}).sort("sent_at", 1))
 
 @app.get("/", response_class=HTMLResponse)
 async def login_page():
