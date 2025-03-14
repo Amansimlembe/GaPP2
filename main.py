@@ -17,7 +17,6 @@ import logging
 
 load_dotenv()
 
-# Logging setup
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -101,7 +100,12 @@ def get_password_hash(password):
     return pwd_context.hash(password)
 
 def create_access_token(data: dict):
-    return jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
+    try:
+        token = jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
+        return token
+    except Exception as e:
+        logger.error(f"Token creation failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create access token")
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     try:
@@ -140,7 +144,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
                     "group_id": data.get("group_id"),
                     "message_type": data.get("message_type", "text"),
                     "content": data["content"],
-                    "sent_at": datetime.datetime.now(datetime.timezone.utc)
+                    "sent_at": datetime.datetime.now(datetime.timezone.utc).isoformat()  # Ensure string format
                 }
                 messages_collection.insert_one(message)
                 if message["recipient_id"]:
@@ -148,12 +152,13 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int):
                         await active_connections[message["recipient_id"]].send_json(message)
                 elif message["group_id"]:
                     group = groups_collection.find_one({"_id": message["group_id"]})
-                    for member in group["members"]:
-                        if member in active_connections and member != user_id:
-                            await active_connections[member].send_json(message)
+                    if group:
+                        for member in group["members"]:
+                            if member in active_connections and member != user_id:
+                                await active_connections[member].send_json(message)
                 await websocket.send_json(message)
     except Exception as e:
-        logger.error(f"WebSocket error: {e}")
+        logger.error(f"WebSocket error for user {user_id}: {e}")
     finally:
         if user_id in active_connections:
             del active_connections[user_id]
@@ -173,7 +178,7 @@ async def register(user: User):
         users_collection.insert_one(user_dict)
         if user.role == 0:
             jobseekers_collection.insert_one({"_id": user_dict["_id"], "email": user.email})
-        token = create_access_token({"sub": str(user_dict["_id"])})
+        token = create_access_token({"sub": str(user_dict["_id"])})  # Explicitly convert to string
         logger.info(f"User registered: {user_dict['_id']}")
         return {"access_token": token, "role": user.role, "user_id": user_dict["_id"]}
     except HTTPException as he:
@@ -188,7 +193,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         user = users_collection.find_one({"$or": [{"email": form_data.username}, {"phone_number": form_data.username}]})
         if not user or not verify_password(form_data.password, user["password"]):
             raise HTTPException(status_code=401, detail="Invalid credentials")
-        token = create_access_token({"sub": str(user["_id"])})
+        token = create_access_token({"sub": str(user["_id"])})  # Explicitly convert to string
         return {"access_token": token, "role": user["role"], "user_id": user["_id"]}
     except Exception as e:
         logger.error(f"Login failed: {e}")
@@ -207,7 +212,6 @@ async def post_job(job: Job, current_user: dict = Depends(get_current_user)):
 @app.get("/jobs/ai_fetched")
 async def ai_fetched_jobs():
     try:
-        # Simulate AI job fetching
         response = requests.get("https://api.github.com/repos/github/jobs/contents/sample_jobs.json")
         if response.status_code == 200:
             jobs = response.json()
@@ -222,7 +226,7 @@ async def apply_for_job(job_id: int, current_user: dict = Depends(get_current_us
     if current_user["role"] != 0:
         raise HTTPException(status_code=403, detail="Not authorized")
     last_app = job_applications_collection.find_one(sort=[("_id", -1)])
-    app_dict = {"job_id": job_id, "user_id": current_user["_id"], "applied_at": datetime.datetime.now(datetime.timezone.utc)}
+    app_dict = {"job_id": job_id, "user_id": current_user["_id"], "applied_at": datetime.datetime.now(datetime.timezone.utc).isoformat()}
     app_dict["_id"] = (last_app["_id"] + 1) if last_app else 1
     job_applications_collection.insert_one(app_dict)
     return {"message": "Application submitted"}
@@ -274,7 +278,7 @@ async def jobseeker_dashboard(current_user: dict = Depends(get_current_user)):
     if current_user["role"] != 0:
         raise HTTPException(status_code=403, detail="Not authorized")
     jobs = list(jobs_collection.find({"status": "active"}))
-    return {"user_id": current_user["_id"], "jobs": jobs}
+    return {"user_id": current_user["_id"], "jobs": [{k: str(v) if isinstance(v, datetime.datetime) else v for k, v in job.items()} for job in jobs]}
 
 @app.get("/employer/dashboard")
 async def employer_dashboard(current_user: dict = Depends(get_current_user)):
@@ -286,12 +290,17 @@ async def employer_dashboard(current_user: dict = Depends(get_current_user)):
         {"$lookup": {"from": "jobseekers", "localField": "user_id", "foreignField": "_id", "as": "jobseeker"}},
         {"$match": {"job.user_id": current_user["_id"]}}
     ]))
-    return {"user_id": current_user["_id"], "jobs": jobs, "applications": applications}
+    return {
+        "user_id": current_user["_id"],
+        "jobs": [{k: str(v) if isinstance(v, datetime.datetime) else v for k, v in job.items()} for job in jobs],
+        "applications": applications
+    }
 
 @app.get("/chat_list")
 async def get_chat_list(current_user: dict = Depends(get_current_user)):
     pipeline = [
         {"$match": {"$or": [{"sender_id": current_user["_id"]}, {"recipient_id": current_user["_id"]}]}},
+
         {"$group": {
             "_id": {"$cond": [{"$eq": ["$sender_id", current_user["_id"]]}, "$recipient_id", "$sender_id"]},
             "last_message": {"$max": "$sent_at"},
@@ -317,7 +326,7 @@ async def get_messages(recipient_id: int, current_user: dict = Depends(get_curre
             {"sender_id": recipient_id, "recipient_id": current_user["_id"]}
         ]
     }).sort("sent_at", 1))
-    return messages
+    return [{k: str(v) if isinstance(v, datetime.datetime) else v for k, v in m.items()} for m in messages]
 
 @app.get("/groups")
 async def get_groups(current_user: dict = Depends(get_current_user)):
@@ -325,7 +334,8 @@ async def get_groups(current_user: dict = Depends(get_current_user)):
 
 @app.get("/messages/group/{group_id}")
 async def get_group_messages(group_id: int, current_user: dict = Depends(get_current_user)):
-    return list(messages_collection.find({"group_id": group_id}).sort("sent_at", 1))
+    messages = list(messages_collection.find({"group_id": group_id}).sort("sent_at", 1))
+    return [{k: str(v) if isinstance(v, datetime.datetime) else v for k, v in m.items()} for m in messages]
 
 @app.get("/", response_class=HTMLResponse)
 async def login_page():

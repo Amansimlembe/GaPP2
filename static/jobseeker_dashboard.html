@@ -64,10 +64,11 @@
                 const jobsResp = await fetch('/jobs/ai_fetched', { headers: { 'Authorization': `Bearer ${token}` } });
                 const aiJobs = await jobsResp.json();
                 const employerJobsResp = await fetch('/jobseeker/dashboard', { headers: { 'Authorization': `Bearer ${token}` } });
+                if (!employerJobsResp.ok) throw new Error((await employerJobsResp.json()).detail || 'Failed to fetch employer jobs');
                 const employerJobs = (await employerJobsResp.json()).jobs;
                 const allJobs = [...employerJobs, ...aiJobs];
                 const jobSeekerResp = await fetch('/jobseeker/update_cv', { headers: { 'Authorization': `Bearer ${token}` }, method: 'GET' });
-                const jobSeeker = await jobSeekerResp.json();
+                const jobSeeker = jobSeekerResp.ok ? await jobSeekerResp.json() : { skills: '' };
                 const skills = jobSeeker.skills || '';
                 document.getElementById('jobList').innerHTML = allJobs
                     .filter(job => job.requirements.includes(skills.split(',')[0]) || true)

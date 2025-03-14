@@ -78,8 +78,8 @@
         async function loadDashboard() {
             try {
                 const resp = await fetch('/employer/dashboard', { headers: { 'Authorization': `Bearer ${token}` } });
+                if (!resp.ok) throw new Error((await resp.json()).detail || 'Failed to load dashboard');
                 const data = await resp.json();
-                if (!resp.ok) throw new Error(data.detail || 'Failed to load dashboard');
                 document.getElementById('jobList').innerHTML = data.jobs.map(job => `
                     <div class="job-card">
                         <h4>${job.title}</h4>
