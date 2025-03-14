@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, WebSocket, Form, UploadFile, File
+from fastapi import FastAPI, HTTPException, WebSocket, Form, UploadFile, File, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey
@@ -37,7 +37,7 @@ engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# SQLAlchemy Models (unchanged)
+# SQLAlchemy Models
 class UserDB(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
@@ -98,7 +98,7 @@ class GroupMemberDB(Base):
 
 Base.metadata.create_all(bind=engine)
 
-# Pydantic Models (unchanged)
+# Pydantic Models
 class User(BaseModel):
     email: str
     phone_number: str
@@ -151,7 +151,7 @@ def get_db():
     finally:
         db.close()
 
-# WebSocket for Real-Time Messaging (unchanged)
+# WebSocket for Real-Time Messaging
 active_connections: Dict[int, WebSocket] = {}
 webrtc_signals: Dict[str, list] = {}
 
