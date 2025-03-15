@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, WebSocket, Form, UploadFile, File, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
@@ -22,6 +23,9 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
+# Mount static files
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -37,7 +41,7 @@ engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# SQLAlchemy Models
+# SQLAlchemy Models (unchanged from previous response)
 class UserDB(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
@@ -108,7 +112,7 @@ class CallDB(Base):
 
 Base.metadata.create_all(bind=engine)
 
-# Pydantic Models
+# Pydantic Models (unchanged)
 class User(BaseModel):
     email: str
     phone_number: str
@@ -138,7 +142,7 @@ def get_db():
     finally:
         db.close()
 
-# WebSocket for Real-Time Messaging
+# WebSocket for Real-Time Messaging (unchanged)
 active_connections: Dict[int, WebSocket] = {}
 typing_users: Dict[int, set] = {}
 
@@ -229,6 +233,15 @@ async def login(username: str = Form(...), password: str = Form(...), db: Sessio
         raise HTTPException(status_code=401, detail="Invalid credentials")
     return {"user_id": user.id, "role": user.role}
 
+@app.get("/", response_class=HTMLResponse)
+async def login_page():
+    try:
+        with open("static/login.html", "r") as f:
+            return HTMLResponse(content=f.read())
+    except FileNotFoundError:
+        logger.error("login.html not found in static directory")
+        raise HTTPException(status_code=404, detail="Login page not found")
+
 @app.get("/dashboard/{role}", response_class=HTMLResponse)
 async def dashboard(role: str, user_id: str = Query(..., regex=r"^\d+:\d+$")):
     try:
@@ -242,6 +255,9 @@ async def dashboard(role: str, user_id: str = Query(..., regex=r"^\d+:\d+$")):
                 return HTMLResponse(content=f.read())
         finally:
             db.close()
+    except FileNotFoundError:
+        logger.error(f"{role}_dashboard.html not found")
+        raise HTTPException(status_code=404, detail="Dashboard page not found")
     except Exception as e:
         logger.error(f"Dashboard error: {e}")
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
