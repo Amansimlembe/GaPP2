@@ -23,7 +23,6 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
-# Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 app.add_middleware(
@@ -36,7 +35,7 @@ app.add_middleware(
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
-    logger.error("DATABASE_URL not set in environment variables")
+    logger.error("DATABASE_URL not set")
     raise ValueError("DATABASE_URL environment variable not set")
 try:
     engine = create_engine(DATABASE_URL, pool_pre_ping=True)
@@ -47,7 +46,6 @@ except Exception as e:
 
 Base = declarative_base()
 
-# SQLAlchemy Models (unchanged)
 class UserDB(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
@@ -60,6 +58,7 @@ class UserDB(Base):
     last_seen = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.now(datetime.timezone.utc))
 
+# Other models remain unchanged (JobDB, MessageDB, etc.)
 class JobDB(Base):
     __tablename__ = "jobs"
     id = Column(Integer, primary_key=True, index=True)
@@ -116,14 +115,8 @@ class CallDB(Base):
     start_time = Column(DateTime, default=datetime.datetime.now(datetime.timezone.utc))
     end_time = Column(DateTime, nullable=True)
 
-try:
-    Base.metadata.create_all(bind=engine)
-    logger.info("Database tables created successfully")
-except Exception as e:
-    logger.error(f"Failed to create database tables: {e}")
-    raise
+Base.metadata.create_all(bind=engine)
 
-# Pydantic Models
 class User(BaseModel):
     email: str
     phone_number: str
@@ -137,7 +130,6 @@ class Message(BaseModel):
     message_type: str
     content: str
 
-# Password Hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def verify_password(plain_password, hashed_password):
@@ -153,7 +145,6 @@ def get_db():
     finally:
         db.close()
 
-# WebSocket for Real-Time Messaging (unchanged)
 active_connections: Dict[int, WebSocket] = {}
 typing_users: Dict[int, set] = {}
 
@@ -221,6 +212,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, db: Session = D
             del active_connections[user_id]
         db.query(UserDB).filter(UserDB.id == user_id).update({"last_seen": datetime.datetime.now(datetime.timezone.utc)})
         db.commit()
+
 @app.post("/register")
 async def register(user: User, db: Session = Depends(get_db)):
     try:
@@ -239,6 +231,15 @@ async def register(user: User, db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"Register error: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error")
+
+@app.get("/register", response_class=HTMLResponse)
+async def register_page():
+    try:
+        with open("static/register.html", "r") as f:
+            return HTMLResponse(content=f.read())
+    except FileNotFoundError:
+        logger.error("register.html not found in static directory")
+        raise HTTPException(status_code=404, detail="Register page not found")
 
 @app.post("/login", response_class=JSONResponse)
 async def login(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
