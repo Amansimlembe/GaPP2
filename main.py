@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, WebSocket, Form, UploadFile, File, Depends, Query
+from fastapi import FastAPI, HTTPException, WebSocket, Form, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -41,7 +41,7 @@ engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# SQLAlchemy Models (unchanged from previous response)
+# SQLAlchemy Models
 class UserDB(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
@@ -112,7 +112,7 @@ class CallDB(Base):
 
 Base.metadata.create_all(bind=engine)
 
-# Pydantic Models (unchanged)
+# Pydantic Models
 class User(BaseModel):
     email: str
     phone_number: str
@@ -142,7 +142,7 @@ def get_db():
     finally:
         db.close()
 
-# WebSocket for Real-Time Messaging (unchanged)
+# WebSocket for Real-Time Messaging
 active_connections: Dict[int, WebSocket] = {}
 typing_users: Dict[int, set] = {}
 
@@ -243,18 +243,14 @@ async def login_page():
         raise HTTPException(status_code=404, detail="Login page not found")
 
 @app.get("/dashboard/{role}", response_class=HTMLResponse)
-async def dashboard(role: str, user_id: str = Query(..., regex=r"^\d+:\d+$")):
+async def dashboard(role: str, user_id: str = Query(..., regex=r"^\d+:\d+$"), db: Session = Depends(get_db)):
     try:
         uid, rid = map(int, user_id.split(":"))
-        db = SessionLocal()
-        try:
-            user = db.query(UserDB).filter(UserDB.id == uid).first()
-            if not user or user.role != rid or (role == "jobseeker" and rid != 0) or (role == "employer" and rid != 1):
-                raise HTTPException(status_code=403, detail="Not authorized")
-            with open(f"static/{role}_dashboard.html", "r") as f:
-                return HTMLResponse(content=f.read())
-        finally:
-            db.close()
+        user = db.query(UserDB).filter(UserDB.id == uid).first()
+        if not user or user.role != rid or (role == "jobseeker" and rid != 0) or (role == "employer" and rid != 1):
+            raise HTTPException(status_code=403, detail="Not authorized")
+        with open(f"static/{role}_dashboard.html", "r") as f:
+            return HTMLResponse(content=f.read())
     except FileNotFoundError:
         logger.error(f"{role}_dashboard.html not found")
         raise HTTPException(status_code=404, detail="Dashboard page not found")

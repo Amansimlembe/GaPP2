@@ -83,8 +83,8 @@
     </div>
 
     <script>
-        const params = new URLSearchParams(window.location.search);
-        const userIdRole = params.get('user_id');
+        const userIdRole = localStorage.getItem('userIdRole');
+        if (!userIdRole) window.location.href = '/';
         const [userId, role] = userIdRole.split(':').map(Number);
         let socket;
 
@@ -108,7 +108,8 @@
         }
 
         async function loadDashboard() {
-            const resp = await fetch(`/jobseeker/dashboard?user_id=${userId}:${role}`);
+            const resp = await fetch(`/jobseeker/dashboard?user_id=${userIdRole}`);
+            if (!resp.ok) throw new Error('Failed to load dashboard');
             const data = await resp.json();
             document.getElementById('jobList').innerHTML = data.jobs.map(job => `
                 <div><h3>${job.title}</h3><p>${job.description}</p></div>
@@ -116,7 +117,8 @@
         }
 
         async function loadJobs() {
-            const resp = await fetch(`/jobseeker/dashboard?user_id=${userId}:${role}`);
+            const resp = await fetch(`/jobseeker/dashboard?user_id=${userIdRole}`);
+            if (!resp.ok) throw new Error('Failed to load jobs');
             const data = await resp.json();
             document.getElementById('availableJobs').innerHTML = data.jobs.map(job => `
                 <div><h3>${job.title}</h3><p>${job.description}</p><button onclick="apply(${job.id})">Apply</button></div>
@@ -126,7 +128,8 @@
         async function loadChats() {
             socket = new WebSocket(`wss://${window.location.host}/ws/${userId}`);
             socket.onmessage = handleMessage;
-            const resp = await fetch(`/chat_list?user_id=${userId}:${role}`);
+            const resp = await fetch(`/chat_list?user_id=${userIdRole}`);
+            if (!resp.ok) throw new Error('Failed to load chats');
             const chats = await resp.json();
             document.getElementById('chatList').innerHTML = chats.map(chat => `
                 <div class="chat-card" onclick="loadMessages(${chat.user_id})">
@@ -142,7 +145,8 @@
 
         async function loadMessages(recipientId) {
             localStorage.setItem('chatTarget', recipientId);
-            const resp = await fetch(`/messages/${recipientId}?user_id=${userId}:${role}`);
+            const resp = await fetch(`/messages/${recipientId}?user_id=${userIdRole}`);
+            if (!resp.ok) throw new Error('Failed to load messages');
             const messages = await resp.json();
             const recipient = await fetchUser(recipientId);
             document.getElementById('chatHeader').innerHTML = `
@@ -166,7 +170,8 @@
         }
 
         async function fetchUser(userId) {
-            const resp = await fetch(`/user/${userId}?user_id=${userId}:${role}`);
+            const resp = await fetch(`/user/${userId}?user_id=${userIdRole}`);
+            if (!resp.ok) throw new Error('Failed to fetch user');
             return await resp.json();
         }
 
@@ -224,7 +229,7 @@
         }
 
         function logout() {
-            localStorage.clear();
+            localStorage.removeItem('userIdRole');
             window.location.href = '/';
         }
 
