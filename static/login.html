@@ -23,7 +23,7 @@
             <input type="password" id="password" placeholder="Password" required>
             <button type="submit">Login</button>
         </form>
-        <p>Don't have an account? <a href="/register">Register</a></p>
+        <a href="/register">Register</a>
     </div>
 
     <script>
@@ -48,12 +48,12 @@
 
                 if (!response.ok) {
                     const errorData = await response.json();
-                    throw new Error(errorData.detail);
+                    throw new Error(errorData.detail || 'Login failed');
                 }
 
                 const data = await response.json();
                 const userIdRole = `${data.user_id}:${data.role}`;
-                localStorage.setItem('userIdRole', userIdRole); // Store for persistence
+                localStorage.setItem('userIdRole', userIdRole);
                 window.location.href = `/dashboard/${data.role === 0 ? 'jobseeker' : 'employer'}?user_id=${userIdRole}`;
             } catch (error) {
                 alert('Login failed: ' + error.message);

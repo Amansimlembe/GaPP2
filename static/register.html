@@ -5,45 +5,32 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Register - GaPP2</title>
     <style>
-        body { background: #f0f4f8; font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .container { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+        body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f0f4f8; }
+        .register-container { background: white; padding: 20px; border-radius: 5px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); width: 300px; }
         h2 { text-align: center; color: #333; }
-        .form-group { margin-bottom: 20px; }
-        label { display: block; margin-bottom: 5px; color: #555; }
-        input, select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
-        button { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        input { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; }
+        select { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px; }
+        button { width: 100%; padding: 10px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
         button:hover { background: #0056b3; }
-        p { text-align: center; margin-top: 20px; }
-        a { color: #007bff; text-decoration: none; }
+        a { display: block; text-align: center; margin-top: 10px; color: #007bff; text-decoration: none; }
         a:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="register-container">
         <h2>Register</h2>
         <form id="registerForm">
-            <div class="form-group">
-                <label for="email">Email</label>
-                <input type="email" id="email" required>
-            </div>
-            <div class="form-group">
-                <label for="phone_number">Phone Number</label>
-                <input type="text" id="phone_number" required>
-            </div>
-            <div class="form-group">
-                <label for="password">Password</label>
-                <input type="password" id="password" required>
-            </div>
-            <div class="form-group">
-                <label for="role">Role</label>
-                <select id="role" required>
-                    <option value="0">Job Seeker</option>
-                    <option value="1">Employer</option>
-                </select>
-            </div>
+            <input type="email" id="email" placeholder="Email" required>
+            <input type="text" id="phone_number" placeholder="Phone Number" required>
+            <input type="password" id="password" placeholder="Password" required>
+            <select id="role" required>
+                <option value="" disabled selected>Select Role</option>
+                <option value="0">Job Seeker</option>
+                <option value="1">Employer</option>
+            </select>
             <button type="submit">Register</button>
         </form>
-        <p>Already have an account? <a href="/">Login</a></p>
+        <a href="/">Login</a>
     </div>
 
     <script>
@@ -52,21 +39,26 @@
             const email = document.getElementById('email').value;
             const phone_number = document.getElementById('phone_number').value;
             const password = document.getElementById('password').value;
-            const role = parseInt(document.getElementById('role').value);
+            const role = document.getElementById('role').value;
+
             try {
                 const response = await fetch('/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, phone_number, password, role })
+                    body: JSON.stringify({ email, phone_number, password, role: parseInt(role) })
                 });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail);
+                }
+
                 const data = await response.json();
-                if (!response.ok) throw new Error(data.detail || 'Registration failed');
-                localStorage.setItem('userId', data.user_id);
-                localStorage.setItem('role', data.role);
-                window.location.href = `/dashboard/${data.role === 0 ? 'jobseeker' : 'employer'}?user_id=${data.user_id}`;
+                const userIdRole = `${data.user_id}:${data.role}`;
+                localStorage.setItem('userIdRole', userIdRole);
+                window.location.href = `/dashboard/${data.role === 0 ? 'jobseeker' : 'employer'}?user_id=${userIdRole}`;
             } catch (error) {
-                console.error('Registration error:', error.message);
-                alert(error.message);
+                alert('Registration failed: ' + error.message);
             }
         });
     </script>

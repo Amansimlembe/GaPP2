@@ -221,8 +221,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, db: Session = D
             del active_connections[user_id]
         db.query(UserDB).filter(UserDB.id == user_id).update({"last_seen": datetime.datetime.now(datetime.timezone.utc)})
         db.commit()
-
-# API Endpoints
 @app.post("/register")
 async def register(user: User, db: Session = Depends(get_db)):
     try:
@@ -254,7 +252,7 @@ async def login(username: str = Form(...), password: str = Form(...), db: Sessio
             logger.warning(f"Password mismatch for user: {user.id}")
             raise HTTPException(status_code=401, detail="Invalid credentials")
         logger.info(f"Login successful for user: {user.id}")
-        return {"user_id": user.id, "role": user.role}
+        return JSONResponse(content={"user_id": user.id, "role": user.role})
     except HTTPException as e:
         raise e
     except Exception as e:
