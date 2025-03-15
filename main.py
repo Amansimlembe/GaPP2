@@ -114,6 +114,24 @@ class CallDB(Base):
     start_time = Column(DateTime, default=datetime.datetime.now(datetime.timezone.utc))
     end_time = Column(DateTime, nullable=True)
 
+# Update database schema on startup
+try:
+    with engine.connect() as connection:
+        # Add missing columns to users table
+        connection.execute("""
+            ALTER TABLE users
+            ADD COLUMN IF NOT EXISTS profile_pic VARCHAR DEFAULT '/static/default_profile.jpg',
+            ADD COLUMN IF NOT EXISTS about VARCHAR DEFAULT 'Hey there! I''m using G.Chat',
+            ADD COLUMN IF NOT EXISTS last_seen TIMESTAMP WITH TIME ZONE,
+            ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+        """)
+        connection.commit()
+    logger.info("Database schema updated successfully")
+except Exception as e:
+    logger.error(f"Failed to update database schema: {e}")
+    raise
+
+# Create tables (for any new tables not yet existing)
 Base.metadata.create_all(bind=engine)
 
 class User(BaseModel):
