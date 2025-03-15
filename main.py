@@ -36,12 +36,18 @@ app.add_middleware(
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
+    logger.error("DATABASE_URL not set in environment variables")
     raise ValueError("DATABASE_URL environment variable not set")
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+try:
+    engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+except Exception as e:
+    logger.error(f"Failed to connect to database: {e}")
+    raise
+
 Base = declarative_base()
 
-# SQLAlchemy Models
+# SQLAlchemy Models (unchanged)
 class UserDB(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
@@ -110,7 +116,12 @@ class CallDB(Base):
     start_time = Column(DateTime, default=datetime.datetime.now(datetime.timezone.utc))
     end_time = Column(DateTime, nullable=True)
 
-Base.metadata.create_all(bind=engine)
+try:
+    Base.metadata.create_all(bind=engine)
+    logger.info("Database tables created successfully")
+except Exception as e:
+    logger.error(f"Failed to create database tables: {e}")
+    raise
 
 # Pydantic Models
 class User(BaseModel):
@@ -142,7 +153,7 @@ def get_db():
     finally:
         db.close()
 
-# WebSocket for Real-Time Messaging
+# WebSocket for Real-Time Messaging (unchanged)
 active_connections: Dict[int, WebSocket] = {}
 typing_users: Dict[int, set] = {}
 
@@ -214,24 +225,41 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, db: Session = D
 # API Endpoints
 @app.post("/register")
 async def register(user: User, db: Session = Depends(get_db)):
-    if db.query(UserDB).filter(UserDB.email == user.email).first():
-        raise HTTPException(status_code=400, detail="Email already exists")
-    if db.query(UserDB).filter(UserDB.phone_number == user.phone_number).first():
-        raise HTTPException(status_code=400, detail="Phone number already exists")
-    hashed_password = get_password_hash(user.password)
-    last_user = db.query(UserDB).order_by(UserDB.id.desc()).first()
-    user_id = (last_user.id + 1) if last_user else 1
-    db_user = UserDB(id=user_id, email=user.email, phone_number=user.phone_number, password=hashed_password, role=user.role)
-    db.add(db_user)
-    db.commit()
-    return {"user_id": user_id, "role": user.role}
+    try:
+        if db.query(UserDB).filter(UserDB.email == user.email).first():
+            raise HTTPException(status_code=400, detail="Email already exists")
+        if db.query(UserDB).filter(UserDB.phone_number == user.phone_number).first():
+            raise HTTPException(status_code=400, detail="Phone number already exists")
+        hashed_password = get_password_hash(user.password)
+        last_user = db.query(UserDB).order_by(UserDB.id.desc()).first()
+        user_id = (last_user.id + 1) if last_user else 1
+        db_user = UserDB(id=user_id, email=user.email, phone_number=user.phone_number, password=hashed_password, role=user.role)
+        db.add(db_user)
+        db.commit()
+        logger.info(f"User registered: {user_id}")
+        return {"user_id": user_id, "role": user.role}
+    except Exception as e:
+        logger.error(f"Register error: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
-@app.post("/login")
+@app.post("/login", response_class=JSONResponse)
 async def login(username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
-    user = db.query(UserDB).filter((UserDB.email == username) | (UserDB.phone_number == username)).first()
-    if not user or not verify_password(password, user.password):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    return {"user_id": user.id, "role": user.role}
+    try:
+        logger.info(f"Login attempt for username: {username}")
+        user = db.query(UserDB).filter((UserDB.email == username) | (UserDB.phone_number == username)).first()
+        if not user:
+            logger.warning(f"No user found for username: {username}")
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        if not verify_password(password, user.password):
+            logger.warning(f"Password mismatch for user: {user.id}")
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        logger.info(f"Login successful for user: {user.id}")
+        return {"user_id": user.id, "role": user.role}
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.error(f"Login error: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
 @app.get("/", response_class=HTMLResponse)
 async def login_page():
@@ -248,6 +276,7 @@ async def dashboard(role: str, user_id: str = Query(..., regex=r"^\d+:\d+$"), db
         uid, rid = map(int, user_id.split(":"))
         user = db.query(UserDB).filter(UserDB.id == uid).first()
         if not user or user.role != rid or (role == "jobseeker" and rid != 0) or (role == "employer" and rid != 1):
+            logger.warning(f"Unauthorized access attempt: user_id={uid}, role={rid}")
             raise HTTPException(status_code=403, detail="Not authorized")
         with open(f"static/{role}_dashboard.html", "r") as f:
             return HTMLResponse(content=f.read())
@@ -256,7 +285,7 @@ async def dashboard(role: str, user_id: str = Query(..., regex=r"^\d+:\d+$"), db
         raise HTTPException(status_code=404, detail="Dashboard page not found")
     except Exception as e:
         logger.error(f"Dashboard error: {e}")
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
 @app.get("/employer/dashboard")
 async def employer_dashboard(user_id: str = Query(..., regex=r"^\d+:\d+$"), db: Session = Depends(get_db)):
@@ -325,6 +354,14 @@ async def get_calls(user_id: str = Query(..., regex=r"^\d+:\d+$"), db: Session =
     uid, _ = map(int, user_id.split(":"))
     calls = db.query(CallDB).filter((CallDB.caller_id == uid) | (CallDB.recipient_id == uid)).all()
     return [{"caller_id": c.caller_id, "recipient_id": c.recipient_id, "call_type": c.call_type, "start_time": c.start_time.isoformat(), "end_time": c.end_time.isoformat() if c.end_time else None} for c in calls]
+
+@app.get("/user/{user_id}")
+async def get_user(user_id: int, user_id_auth: str = Query(..., regex=r"^\d+:\d+$"), db: Session = Depends(get_db)):
+    uid, _ = map(int, user_id_auth.split(":"))
+    user = db.query(UserDB).filter(UserDB.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"user_id": user.id, "name": user.email.split("@")[0], "profile_pic": user.profile_pic, "last_seen": user.last_seen.isoformat() if user.last_seen else None}
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
