@@ -9,7 +9,7 @@ from typing import Optional, Dict
 import datetime
 import os
 from passlib.context import CryptContext
-import uKILLvicorn
+import uvicorn
 from dotenv import load_dotenv
 import requests
 import logging
