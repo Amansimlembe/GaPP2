@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,477 +5,299 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Employer Dashboard - GaPP2</title>
     <style>
-        :root {
-            --primary: #007bff;
-            --secondary: #f0f4f8;
-            --text: #333;
-            --bg: #fff;
-            --shadow: 0 4px 8px rgba(0,0,0,0.1);
-            --sent-bg: #dcf8c6;
-            --received-bg: #e9ecef;
-        }
-        [data-theme="dark"] {
-            --primary: #66b0ff;
-            --secondary: #2c3e50;
-            --text: #ecf0f1;
-            --bg: #34495e;
-            --sent-bg: #1abc9c;
-            --received-bg: #7f8c8d;
-        }
-        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: var(--secondary); color: var(--text); transition: all 0.3s; }
-        .container { max-width: 1200px; margin: auto; }
-        .tabs { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
-        .tab { padding: 10px 20px; background: var(--bg); border-radius: 5px 5px 0 0; cursor: pointer; transition: background 0.3s, transform 0.2s; }
-        .tab:hover { transform: scale(1.05); }
-        .tab.active { background: var(--primary); color: white; }
-        .tab-content { display: none; background: var(--bg); padding: 20px; border-radius: 0 5px 5px 5px; box-shadow: var(--shadow); }
-        .tab-content.active { display: block; animation: fadeIn 0.5s; }
-        h2, h3 { color: var(--text); }
-        button { padding: 10px 20px; background: var(--primary); color: white; border: none; border-radius: 5px; cursor: pointer; transition: background 0.3s, transform 0.2s; }
-        button:hover { background: #0056b3; transform: scale(1.05); }
-        .job-card, .app-card, .contact-card { padding: 15px; margin-bottom: 10px; background: var(--bg); border-radius: 5px; box-shadow: var(--shadow); }
-        .form-group { margin-bottom: 20px; }
-        input, textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
-        .chat-area { height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; background: var(--bg); display: flex; flex-direction: column; }
-        .message { padding: 10px; margin: 5px 0; border-radius: 5px; max-width: 70%; word-wrap: break-word; animation: slideInMessage 0.3s; }
-        .message.sent { background: var(--sent-bg); align-self: flex-end; }
-        .message.received { background: var(--received-bg); align-self: flex-start; }
-        .message-input { display: flex; gap: 10px; flex-wrap: wrap; }
-        video { width: 100%; max-width: 400px; border-radius: 5px; }
-        .notification { position: fixed; top: 20px; right: 20px; padding: 10px 20px; background: var(--primary); color: white; border-radius: 5px; box-shadow: var(--shadow); animation: slideIn 0.5s; }
-        .badge { display: inline-block; padding: 5px 10px; background: #28a745; color: white; border-radius: 15px; margin: 5px; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes slideIn { from { right: -100%; } to { right: 20px; } }
-        @keyframes slideInMessage { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        @media (max-width: 768px) {
-            .tabs { flex-direction: column; }
-            .container { padding: 10px; }
-            .job-card, .app-card, .contact-card { padding: 10px; }
-            .message-input { flex-direction: column; }
-        }
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; background: #f5f5f5; display: flex; height: 100vh; }
+        .sidebar { width: 250px; background: #075e54; color: white; padding: 20px; }
+        .sidebar .tab { padding: 15px; cursor: pointer; }
+        .sidebar .tab:hover, .sidebar .tab.active { background: #128c7e; }
+        .content { flex-grow: 1; padding: 20px; overflow-y: auto; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .whatsapp-container { height: 100%; display: flex; }
+        .chat-list { width: 350px; background: #fff; border-right: 1px solid #e5e5e5; overflow-y: auto; }
+        .chat-card { padding: 15px; border-bottom: 1px solid #e5e5e5; display: flex; align-items: center; cursor: pointer; }
+        .chat-card:hover { background: #f0f0f0; }
+        .profile-pic { width: 50px; height: 50px; border-radius: 50%; margin-right: 10px; }
+        .chat-preview { flex-grow: 1; }
+        .chat-area { flex-grow: 1; display: flex; flex-direction: column; background: #ece5dd; }
+        .chat-header { padding: 10px; background: #075e54; color: white; display: flex; align-items: center; }
+        .chat-header img { width: 40px; height: 40px; border-radius: 50%; margin-right: 10px; }
+        .chat-body { flex-grow: 1; padding: 20px; overflow-y: auto; }
+        .message { max-width: 60%; margin: 10px; padding: 10px; border-radius: 8px; position: relative; }
+        .message.sent { background: #dcf8c6; align-self: flex-end; }
+        .message.received { background: #fff; align-self: flex-start; }
+        .message small { font-size: 10px; color: #666; position: absolute; bottom: -15px; right: 5px; }
+        .message-input { padding: 10px; background: #fff; display: flex; align-items: center; }
+        .message-input input[type="text"] { flex-grow: 1; padding: 10px; border: none; border-radius: 20px; margin-right: 10px; }
+        .message-input button { background: #075e54; color: white; border: none; padding: 10px; border-radius: 50%; cursor: pointer; }
+        .attach-btn { background: none; border: none; font-size: 20px; cursor: pointer; margin-right: 10px; }
+        .subtabs { position: fixed; bottom: 0; width: 100%; background: #fff; display: flex; justify-content: space-around; padding: 10px 0; border-top: 1px solid #e5e5e5; }
+        .subtab { cursor: pointer; padding: 10px; }
+        .subtab.active { color: #075e54; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
-            <select id="languageSelect" onchange="changeLanguage()">
-                <option value="en">English</option>
-                <option value="es">Español</option>
-            </select>
-            <button onclick="toggleTheme()">Toggle Theme</button>
-        </div>
-        <div class="tabs">
-            <div class="tab active" onclick="showTab('dashboard')" data-lang-en="Dashboard" data-lang-es="Tablero">Dashboard</div>
-            <div class="tab" onclick="showTab('post')" data-lang-en="Post a Job" data-lang-es="Publicar un Trabajo">Post a Job</div>
-            <div class="tab" onclick="showTab('candidates')" data-lang-en="Candidates" data-lang-es="Candidatos">Candidates</div>
-            <div class="tab" onclick="showTab('chats')" data-lang-en="Chats" data-lang-es="Chats">Chats</div>
-            <div class="tab" onclick="showTab('interviews')" data-lang-en="Interviews" data-lang-es="Entrevistas">Interviews</div>
-        </div>
-        <div id="dashboard" class="tab-content active">
-            <h2 data-lang-en="Dashboard" data-lang-es="Tablero">Dashboard</h2>
-            <button onclick="logout()" data-lang-en="Logout" data-lang-es="Cerrar Sesión">Logout</button>
-            <h3 data-lang-en="Badges" data-lang-es="Insignias">Badges</h3>
-            <div id="badges"></div>
-            <h3 data-lang-en="Your Jobs" data-lang-es="Tus Trabajos">Your Jobs</h3>
+    <div class="sidebar">
+        <div class="tab" onclick="showTab('dashboard')">Dashboard</div>
+        <div class="tab" onclick="showTab('post')">Post a Job</div>
+        <div class="tab" onclick="showTab('candidates')">Candidates</div>
+        <div class="tab active" onclick="showTab('gchat')">G.Chat</div>
+        <div class="tab" onclick="showTab('interviews')">Interviews</div>
+        <div class="tab" onclick="logout()">Logout</div>
+    </div>
+    <div class="content">
+        <div id="dashboard" class="tab-content">
+            <h2>Employer Dashboard</h2>
             <div id="jobList"></div>
-            <h3 data-lang-en="Feedback" data-lang-es="Comentarios">Feedback</h3>
-            <input type="text" id="feedback" placeholder="Your feedback..." data-lang-en-placeholder="Your feedback..." data-lang-es-placeholder="Tus comentarios...">
-            <button onclick="submitFeedback()" data-lang-en="Submit" data-lang-es="Enviar">Submit</button>
         </div>
         <div id="post" class="tab-content">
-            <h3 data-lang-en="Post a Job" data-lang-es="Publicar un Trabajo">Post a Job</h3>
+            <h2>Post a Job</h2>
             <form id="jobForm">
-<div class="form-group"><input type="text" id="title" placeholder="Title" required data-lang-en-placeholder="Title" data-lang-es-placeholder="Título"></div>
-<div class="form-group"><textarea id="description" placeholder="Description" required data-lang-en-placeholder="Description" data-lang-es-placeholder="Descripción"></textarea></div>
-<div class="form-group"><textarea id="requirements" placeholder="Requirements" required data-lang-en-placeholder="Requirements" data-lang-es-placeholder="Requisitos"></textarea></div>
-<div class="form-group"><input type="date" id="deadline" required></div>
-<div class="form-group"><input type="email" id="employer_email" placeholder="Employer Email" required data-lang-en-placeholder="Employer Email" data-lang-es-placeholder="Correo del Empleador"></div>
-<div class="form-group"><input type="text" id="company_name" placeholder="Company Name" data-lang-en-placeholder="Company Name" data-lang-es-placeholder="Nombre de la Empresa"></div>
-<button type="submit" data-lang-en="Post Job" data-lang-es="Publicar Trabajo">Post Job</button>
-</form>
-</div>
-<div id="candidates" class="tab-content">
-<h3 data-lang-en="Candidates" data-lang-es="Candidatos">Candidates</h3>
-<div id="applications"></div>
-</div>
-<div id="chats" class="tab-content">
-<div class="tabs">
-<div class="tab active" onclick="showChatTab('jobseekers')" data-lang-en="Job Seeker Chats" data-lang-es="Chats con Buscadores de Empleo">Job Seeker Chats</div>
-<div class="tab" onclick="showChatTab('users')" data-lang-en="User Chats" data-lang-es="Chats con Usuarios">User Chats</div>
-<div class="tab" onclick="showChatTab('contacts')" data-lang-en="Contacts" data-lang-es="Contactos">Contacts</div>
-</div>
-<div id="jobseekers" class="chat-tab-content active">
-<h3 data-lang-en="Job Seeker Chats" data-lang-es="Chats con Buscadores de Empleo">Job Seeker Chats</h3>
-<div id="jobseekerChatList"></div>
-</div>
-<div id="users" class="chat-tab-content">
-<h3 data-lang-en="User Chats" data-lang-es="Chats con Usuarios">User Chats</h3>
-<div id="userChatList"></div>
-</div>
-<div id="contacts" class="chat-tab-content">
-<h3 data-lang-en="Contacts" data-lang-es="Contactos">Contacts</h3>
-<input type="text" id="contactInput" placeholder="Enter email or phone number" data-lang-en-placeholder="Enter email or phone number" data-lang-es-placeholder="Ingresa correo o número de teléfono">
-<button onclick="addContact()" data-lang-en="Add Contact" data-lang-es="Agregar Contacto">Add Contact</button>
-<div id="contactList"></div>
-</div>
-<div class="chat-area" id="messages"></div>
-<div class="message-input">
-<input type="text" id="messageInput" placeholder="Type a message" oninput="showTyping()" data-lang-en-placeholder="Type a message" data-lang-es-placeholder="Escribe un mensaje">
-<input type="file" id="mediaInput" accept="image/*,audio/*,video/*">
-<button onclick="sendMessage('text')" data-lang-en="Send" data-lang-es="Enviar">Send</button>
-<button onclick="sendMessage('media')" data-lang-en="Send Media" data-lang-es="Enviar Multimedia">Send Media</button>
-<button onclick="sendVoiceMessage()" data-lang-en="Send Voice" data-lang-es="Enviar Voz">Send Voice</button>
-</div>
-</div>
-<div id="interviews" class="tab-content">
-<h3 data-lang-en="Video Interviews" data-lang-es="Entrevistas por Video">Video Interviews</h3>
-<input type="text" id="interviewTarget" placeholder="Enter Job Seeker ID" data-lang-en-placeholder="Enter Job Seeker ID" data-lang-es-placeholder="Ingresa ID del Buscador de Empleo">
-<input type="datetime-local" id="interviewTime" placeholder="Select Time">
-<button onclick="scheduleInterview()" data-lang-en="Schedule Interview" data-lang-es="Programar Entrevista">Schedule Interview</button>
-<button onclick="startVideoCall()" data-lang-en="Start Interview" data-lang-es="Iniciar Entrevista">Start Interview</button>
-<video id="localVideo" autoplay muted></video>
-<video id="remoteVideo" autoplay></video>
-</div>
-</div>
-<div id="notifications"></div>
+                <input type="text" id="title" placeholder="Title" required>
+                <textarea id="description" placeholder="Description" required></textarea>
+                <textarea id="requirements" placeholder="Requirements" required></textarea>
+                <input type="date" id="deadline" required>
+                <input type="email" id="employer_email" placeholder="Employer Email" required>
+                <input type="text" id="company_name" placeholder="Company Name">
+                <button type="submit">Post Job</button>
+            </form>
+        </div>
+        <div id="candidates" class="tab-content">
+            <h2>Candidates</h2>
+            <div id="applications"></div>
+        </div>
+        <div id="gchat" class="tab-content active">
+            <div class="whatsapp-container">
+                <div class="chat-list" id="chatList"></div>
+                <div class="chat-area" id="chatArea">
+                    <div class="chat-header" id="chatHeader"></div>
+                    <div class="chat-body" id="messages"></div>
+                    <div class="message-input">
+                        <button class="attach-btn" onclick="document.getElementById('mediaInput').click()">📎</button>
+                        <input type="file" id="mediaInput" accept="image/*,audio/*,video/*" style="display: none;">
+                        <input type="text" id="messageInput" placeholder="Type a message" oninput="showTyping()">
+                        <button onclick="sendMessage()">➤</button>
+                    </div>
+                </div>
+            </div>
+            <div class="subtabs">
+                <div class="subtab active" onclick="showSubTab('chats')">Chats</div>
+                <div class="subtab" onclick="showSubTab('calls')">Calls</div>
+                <div class="subtab" onclick="showSubTab('status')">Status</div>
+                <div class="subtab" onclick="showSubTab('settings')">Settings</div>
+            </div>
+        </div>
+        <div id="interviews" class="tab-content">
+            <h2>Interviews</h2>
+            <input type="text" id="interviewTarget" placeholder="Enter Job Seeker ID">
+            <input type="datetime-local" id="interviewTime">
+            <button onclick="scheduleInterview()">Schedule</button>
+            <video id="localVideo" autoplay muted></video>
+            <video id="remoteVideo" autoplay></video>
+        </div>
+    </div>
 
-<script>
-const userId = parseInt(localStorage.getItem('userId'));
-const role = parseInt(localStorage.getItem('role'));
-let socket, peer, localStream;
-const translations = {
-en: { logout: "Logout", dashboard: "Dashboard", post: "Post a Job", candidates: "Candidates", chats: "Chats", interviews: "Interviews" },
-es: { logout: "Cerrar Sesión", dashboard: "Tablero", post: "Publicar un Trabajo", candidates: "Candidatos", chats: "Chats", interviews: "Entrevistas" }
-};
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const userIdRole = params.get('user_id');
+        const [userId, role] = userIdRole.split(':').map(Number);
+        let socket, peer, localStream;
 
-function showTab(tabId) {
-document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-document.querySelector(`.tab[onclick="showTab('${tabId}')"]`).classList.add('active');
-document.getElementById(tabId).classList.add('active');
-if (tabId === 'dashboard') loadDashboard();
-if (tabId === 'candidates') loadCandidates();
-}
+        function showTab(tabId) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelector(`.tab[onclick="showTab('${tabId}')"]`).classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+            if (tabId === 'dashboard') loadDashboard();
+            if (tabId === 'gchat') loadChats();
+        }
 
-function showChatTab(tabId) {
-document.querySelectorAll('#chats .tab').forEach(t => t.classList.remove('active'));
-document.querySelectorAll('.chat-tab-content').forEach(t => t.classList.remove('active'));
-document.querySelector(`#chats .tab[onclick="showChatTab('${tabId}')"]`).classList.add('active');
-document.getElementById(tabId).classList.add('active');
-if (tabId === 'jobseekers') loadChatList('jobseekers');
-if (tabId === 'users') loadChatList('users');
-if (tabId === 'contacts') loadContacts();
-}
+        function showSubTab(tabId) {
+            document.querySelectorAll('.subtab').forEach(t => t.classList.remove('active'));
+            document.querySelector(`.subtab[onclick="showSubTab('${tabId}')"]`).classList.add('active');
+            if (tabId === 'chats') loadChats();
+            if (tabId === 'calls') loadCalls();
+            if (tabId === 'status') loadStatus();
+            if (tabId === 'settings') loadSettings();
+        }
 
-async function loadDashboard() {
-if (!userId || role !== 1) {
-window.location.href = '/';
-return;
-}
-socket = new WebSocket(`wss://${window.location.host}/ws/${userId}`);
-socket.onmessage = (event) => {
-const msg = JSON.parse(event.data);
-if (msg.type === 'webrtc_signal') handleSignal(msg);
-else if (msg.type === 'notification') notify(msg.message);
-else if (msg.type === 'typing') document.getElementById('messages').innerHTML += `<p id="typing-${msg.from}">${msg.from} is typing...</p>`;
-else if (msg.type === 'stop_typing') document.getElementById(`typing-${msg.from}`)?.remove();
-else {
-    appendMessage(msg);
-    notify(`New message from ${msg.sender_id}`);
-}
-};
-const resp = await fetch(`/employer/dashboard?user_id=${userId}`);
-const data = await resp.json();
-document.getElementById('jobList').innerHTML = data.jobs.map(job => `
-<div class="job-card">
-    <h4>${job.title}</h4>
-    <p>${job.description}</p>
-</div>
-`).join('');
-loadBadges();
-changeLanguage(localStorage.getItem('language') || 'en');
-}
+        async function loadDashboard() {
+            const resp = await fetch(`/employer/dashboard?user_id=${userId}:${role}`);
+            const data = await resp.json();
+            document.getElementById('jobList').innerHTML = data.jobs.map(job => `
+                <div><h3>${job.title}</h3><p>${job.description}</p></div>
+            `).join('');
+        }
 
-async function loadBadges() {
-const resp = await fetch(`/employer/dashboard?user_id=${userId}`);
-const data = await resp.json();
-document.getElementById('badges').innerHTML = data.badges.map(b => `<span class="badge">${b.name}</span>`).join('');
-}
+        async function loadChats() {
+            socket = new WebSocket(`wss://${window.location.host}/ws/${userId}`);
+            socket.onmessage = handleMessage;
+            const resp = await fetch(`/chat_list?user_id=${userId}:${role}`);
+            const chats = await resp.json();
+            document.getElementById('chatList').innerHTML = chats.map(chat => `
+                <div class="chat-card" onclick="loadMessages(${chat.user_id})">
+                    <img src="${chat.profile_pic}" class="profile-pic">
+                    <div class="chat-preview">
+                        <strong>${chat.name}</strong>
+                        <p>${chat.last_message}</p>
+                        <small>${new Date(chat.last_time).toLocaleTimeString()}</small>
+                    </div>
+                </div>
+            `).join('');
+        }
 
-async function loadCandidates() {
-const resp = await fetch(`/employer/dashboard?user_id=${userId}`);
-const data = await resp.json();
-document.getElementById('applications').innerHTML = data.applications.map(app => `
-<div class="app-card">
-    <p>Job ID: ${app.job_id}</p>
-    <p>Applicant ID: ${app.user_id}</p>
-    <p>Applied: ${app.applied_at}</p>
-    <p>Status: ${app.status}</p>
-    <button onclick="updateStatus(${app.job_id}, ${app.user_id}, 'Viewed')" data-lang-en="Mark Viewed" data-lang-es="Marcar como Visto">Mark Viewed</button>
-    <button onclick="updateStatus(${app.job_id}, ${app.user_id}, 'Shortlisted')" data-lang-en="Shortlist" data-lang-es="Preseleccionar">Shortlist</button>
-    <button onclick="loadMessages(${app.user_id}, 'jobseekers')" data-lang-en="Contact" data-lang-es="Contactar">Contact</button>
-    <button onclick="document.getElementById('interviewTarget').value = ${app.user_id}; showTab('interviews')" data-lang-en="Schedule Interview" data-lang-es="Programar Entrevista">Schedule Interview</button>
-</div>
-`).join('');
-}
+        async function loadMessages(recipientId) {
+            localStorage.setItem('chatTarget', recipientId);
+            const resp = await fetch(`/messages/${recipientId}?user_id=${userId}:${role}`);
+            const messages = await resp.json();
+            const recipient = await fetchUser(recipientId);
+            document.getElementById('chatHeader').innerHTML = `
+                <img src="${recipient.profile_pic}">
+                <div>
+                    <strong>${recipient.name}</strong>
+                    <small>Last seen: ${recipient.last_seen ? new Date(recipient.last_seen).toLocaleString() : 'Offline'}</small>
+                </div>
+                <button onclick="startCall('voice')">📞</button>
+                <button onclick="startCall('video')">📹</button>
+            `;
+            document.getElementById('messages').innerHTML = messages.map(m => `
+                <div class="message ${m.sender_id === userId ? 'sent' : 'received'}">
+                    ${m.message_type === 'text' ? m.content :
+                      m.message_type === 'image' ? `<img src="${m.content}" style="max-width: 200px;">` :
+                      m.message_type === 'audio' ? `<audio controls src="${m.content}"></audio>` :
+                      m.message_type === 'video' ? `<video controls src="${m.content}" style="max-width: 200px;"></video>` : '[File]'}
+                    <small>${new Date(m.sent_at).toLocaleTimeString()} ${m.read_at ? '✔✔' : m.delivered_at ? '✔' : ''}</small>
+                </div>
+            `).join('');
+        }
 
-async function updateStatus(jobId, userId, status) {
-const resp = await fetch('/jobseeker/apply', {
-method: 'POST',
-headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ job_id: jobId, user_id: userId, status })
-});
-notify((await resp.json()).message);
-loadCandidates();
-}
+        async function fetchUser(userId) {
+            const resp = await fetch(`/user/${userId}?user_id=${userId}:${role}`);
+            return await resp.json();
+        }
 
-async function loadChatList(type) {
-try {
-const resp = await fetch(`/chat_list?user_id=${userId}`);
-const chats = await resp.json();
-const listId = type === 'jobseekers' ? 'jobseekerChatList' : 'userChatList';
-document.getElementById(listId).innerHTML = chats.map(chat => {
-    const firstName = chat.email.split('@')[0].split(/[^a-zA-Z]/)[0];
-    return `<div class="chat-card" onclick="loadMessages(${chat.user_id}, '${type}')">${firstName} ${chat.unread ? '(Unread)' : ''}</div>`;
-}).join('');
-} catch (e) {
-notify(`Failed to load ${type} chats: ${e.message}`);
-}
-}
+        function handleMessage(event) {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'typing') document.getElementById('messages').innerHTML += `<p id="typing-${msg.from}">Typing...</p>`;
+            else if (msg.type === 'stop_typing') document.getElementById(`typing-${msg.from}`)?.remove();
+            else appendMessage(msg);
+        }
 
-async function loadContacts() {
-const resp = await fetch(`/contacts/list?user_id=${userId}`);
-const contacts = await resp.json();
-document.getElementById('contactList').innerHTML = contacts.map(contact => {
-const firstName = contact.email.split('@')[0].split(/[^a-zA-Z]/)[0];
-return `
-    <div class="contact-card">
-        ${firstName} (${contact.email})
-        <button onclick="loadMessages(${contact.contact_user_id}, 'users')" data-lang-en="Chat" data-lang-es="Chatear">Chat</button>
-        <button onclick="removeContact(${contact.contact_user_id})" data-lang-en="Remove" data-lang-es="Eliminar">Remove</button>
-    </div>`;
-}).join('');
-}
+        function appendMessage(msg) {
+            if (msg.recipient_id === userId || msg.sender_id === userId) {
+                document.getElementById('messages').innerHTML += `
+                    <div class="message ${msg.sender_id === userId ? 'sent' : 'received'}">
+                        ${msg.message_type === 'text' ? msg.content : `<${msg.message_type} src="${msg.content}" controls>`}
+                        <small>${new Date(msg.sent_at).toLocaleTimeString()} ${msg.read_at ? '✔✔' : msg.delivered_at ? '✔' : ''}</small>
+                    </div>`;
+            }
+        }
 
-async function loadMessages(recipientId, type) {
-localStorage.setItem('chatTarget', recipientId);
-localStorage.setItem('chatType', type);
-const resp = await fetch(`/messages/${recipientId}?user_id=${userId}`);
-const messages = await resp.json();
-document.getElementById('messages').innerHTML = messages.map(m => renderMessage(m)).join('');
-}
+        async function sendMessage() {
+            const target = localStorage.getItem('chatTarget');
+            const input = document.getElementById('messageInput');
+            const file = document.getElementById('mediaInput').files[0];
+            const msg = { recipient_id: parseInt(target) };
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    msg.message_type = file.type.split('/')[0];
+                    msg.content = reader.result;
+                    socket.send(JSON.stringify(msg));
+                    document.getElementById('mediaInput').value = '';
+                };
+                reader.readAsDataURL(file);
+            } else if (input.value) {
+                msg.message_type = 'text';
+                msg.content = input.value;
+                socket.send(JSON.stringify(msg));
+                input.value = '';
+            }
+        }
 
-function renderMessage(msg) {
-const isSent = msg.sender_id === userId;
-return `
-<div class="message ${isSent ? 'sent' : 'received'}">
-    ${msg.message_type === 'text' ? msg.content :
-      msg.message_type === 'image' ? `<img src="${msg.content}" style="max-width: 200px;">` :
-      msg.message_type === 'audio' ? `<audio controls src="${msg.content}"></audio>` :
-      msg.message_type === 'video' ? `<video controls src="${msg.content}" style="max-width: 200px;"></video>` : '[Unsupported format]'}
-    <small>${isSent && msg.read_at ? '✔✔' : isSent ? '✔' : ''}</small>
-</div>`;
-}
+        function showTyping() {
+            const target = localStorage.getItem('chatTarget');
+            if (target) socket.send(JSON.stringify({ type: 'typing', to: target }));
+        }
 
-async function sendMessage(type) {
-const target = localStorage.getItem('chatTarget');
-if (!target) return notify('Select a chat first');
-const msg = { recipient_id: parseInt(target), message_type: type };
-if (type === 'text') {
-msg.content = document.getElementById('messageInput').value;
-if (!msg.content) return;
-socket.send(JSON.stringify(msg));
-document.getElementById('messageInput').value = '';
-} else {
-const file = document.getElementById('mediaInput').files[0];
-if (!file) return notify('Select a file');
-const reader = new FileReader();
-reader.onload = () => {
-    msg.message_type = file.type.split('/')[0];
-    msg.content = reader.result;
-    socket.send(JSON.stringify(msg));
-};
-reader.readAsDataURL(file);
-}
-}
+        async function startCall(type) {
+            const target = localStorage.getItem('chatTarget');
+            localStream = await navigator.mediaDevices.getUserMedia(type === 'voice' ? { audio: true } : { video: true, audio: true });
+            document.getElementById('localVideo').srcObject = localStream;
+            peer = new RTCPeerConnection();
+            localStream.getTracks().forEach(track => peer.addTrack(track, localStream));
+            peer.ontrack = (event) => document.getElementById('remoteVideo').srcObject = event.streams[0];
+            const offer = await peer.createOffer();
+            await peer.setLocalDescription(offer);
+            socket.send(JSON.stringify({ type: 'webrtc_signal', signal: offer, to: target, room: `${userId}-${target}` }));
+        }
 
-async function sendVoiceMessage() {
-try {
-const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-const recorder = new MediaRecorder(stream);
-const chunks = [];
-recorder.ondataavailable = e => chunks.push(e.data);
-recorder.onstop = async () => {
-    const blob = new Blob(chunks, { type: 'audio/webm' });
-    const reader = new FileReader();
-    reader.onload = () => {
-        const msg = { recipient_id: parseInt(localStorage.getItem('chatTarget')), message_type: 'audio', content: reader.result };
-        socket.send(JSON.stringify(msg));
-    };
-    reader.readAsDataURL(blob);
-    stream.getTracks().forEach(track => track.stop());
-};
-recorder.start();
-setTimeout(() => recorder.stop(), 5000); // Record for 5 seconds
-} catch (e) {
-notify(`Failed to record voice: ${e.message}`);
-}
-}
+        async function loadCalls() {
+            const resp = await fetch(`/calls?user_id=${userId}:${role}`);
+            const calls = await resp.json();
+            document.getElementById('chatArea').innerHTML = calls.map(c => `
+                <div>${c.call_type} call with ${c.recipient_id} at ${c.start_time}</div>
+            `).join('');
+        }
 
-function appendMessage(msg) {
-document.getElementById('messages').innerHTML += renderMessage(msg);
-document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
-}
+        async function loadStatus() {
+            const resp = await fetch(`/status?user_id=${userId}:${role}`);
+            const statuses = await resp.json();
+            document.getElementById('chatArea').innerHTML = statuses.map(s => `
+                <div>${s.content_type}: ${s.content} (Posted: ${s.posted_at})</div>
+            `).join('');
+        }
 
-async function postJob() {
-const job = {
-user_id: userId,
-title: document.getElementById('title').value,
-description: document.getElementById('description').value,
-requirements: document.getElementById('requirements').value,
-deadline: document.getElementById('deadline').value,
-employer_email: document.getElementById('employer_email').value,
-company_name: document.getElementById('company_name').value
-};
-const resp = await fetch('/employer/post_job', {
-method: 'POST',
-headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify(job)
-});
-const data = await resp.json();
-notify(data.message);
-loadDashboard();
-}
+        function loadSettings() {
+            document.getElementById('chatArea').innerHTML = `
+                <h3>Settings</h3>
+                <input type="file" id="profilePic" accept="image/*">
+                <button onclick="updateProfile()">Update Profile</button>
+            `;
+        }
 
-async function addContact() {
-const contactInput = document.getElementById('contactInput').value;
-const resp = await fetch('/contacts/add', {
-method: 'POST',
-headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ user_id: userId, contact_email: contactInput, contact_phone: contactInput.includes('@') ? null : contactInput })
-});
-const data = await resp.json();
-notify(data.message);
-loadContacts();
-}
+        async function updateProfile() {
+            const file = document.getElementById('profilePic').files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = async () => {
+                    await fetch(`/profile?user_id=${userId}:${role}`, {
+                        method: 'POST',
+                        body: JSON.stringify({ profile_pic: reader.result })
+                    });
+                };
+                reader.readAsDataURL(file);
+            }
+        }
 
-async function removeContact(contactUserId) {
-const resp = await fetch('/contacts/remove', {
-method: 'POST',
-headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-body: new URLSearchParams({ user_id: userId, contact_user_id: contactUserId })
-});
-notify((await resp.json()).message);
-loadContacts();
-}
+        async function postJob() {
+            const job = {
+                user_id: userId,
+                title: document.getElementById('title').value,
+                description: document.getElementById('description').value,
+                requirements: document.getElementById('requirements').value,
+                deadline: document.getElementById('deadline').value,
+                employer_email: document.getElementById('employer_email').value,
+                company_name: document.getElementById('company_name').value
+            };
+            await fetch('/employer/post_job', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(job)
+            });
+            loadDashboard();
+        }
 
-async function scheduleInterview() {
-const target = document.getElementById('interviewTarget').value;
-const time = document.getElementById('interviewTime').value;
-if (!target || !time) return notify('Enter job seeker ID and time');
-const resp = await fetch('/schedule_interview', {
-method: 'POST',
-headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ employer_id: userId, jobseeker_id: target, job_id: 1, time })
-});
-notify((await resp.json()).message);
-}
+        function logout() {
+            localStorage.clear();
+            window.location.href = '/';
+        }
 
-async function startVideoCall() {
-const target = document.getElementById('interviewTarget').value;
-if (!target) return notify('Enter a job seeker ID');
-try {
-localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-document.getElementById('localVideo').srcObject = localStream;
-peer = new RTCPeerConnection();
-localStream.getTracks().forEach(track => peer.addTrack(track, localStream));
-peer.ontrack = (event) => document.getElementById('remoteVideo').srcObject = event.streams[0];
-peer.onicecandidate = (event) => {
-    if (event.candidate) socket.send(JSON.stringify({ type: 'webrtc_signal', signal: event.candidate, to: target, room: `${userId}-${target}` }));
-};
-const offer = await peer.createOffer();
-await peer.setLocalDescription(offer);
-socket.send(JSON.stringify({ type: 'webrtc_signal', signal: offer, to: target, room: `${userId}-${target}` }));
-} catch (e) {
-notify(`Failed to start video: ${e.message}`);
-}
-}
+        document.getElementById('jobForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            postJob();
+        });
 
-async function handleSignal(msg) {
-if (!peer) {
-peer = new RTCPeerConnection();
-localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-document.getElementById('localVideo').srcObject = localStream;
-localStream.getTracks().forEach(track => peer.addTrack(track, localStream));
-peer.ontrack = (event) => document.getElementById('remoteVideo').srcObject = event.streams[0];
-peer.onicecandidate = (event) => {
-    if (event.candidate) socket.send(JSON.stringify({ type: 'webrtc_signal', signal: event.candidate, to: msg.sender_id, room: msg.room }));
-};
-}
-if (msg.signal.type === 'offer') {
-await peer.setRemoteDescription(new RTCSessionDescription(msg.signal));
-const answer = await peer.createAnswer();
-await peer.setLocalDescription(answer);
-socket.send(JSON.stringify({ type: 'webrtc_signal', signal: answer, to: msg.sender_id, room: msg.room }));
-} else if (msg.signal.type === 'answer') {
-await peer.setRemoteDescription(new RTCSessionDescription(msg.signal));
-} else {
-await peer.addIceCandidate(new RTCIceCandidate(msg.signal));
-}
-}
-
-function showTyping() {
-const target = localStorage.getItem('chatTarget');
-if (target) socket.send(JSON.stringify({ type: 'typing', to: target }));
-}
-
-function notify(message) {
-const div = document.createElement('div');
-div.className = 'notification';
-div.textContent = message;
-document.getElementById('notifications').appendChild(div);
-setTimeout(() => div.remove(), 3000);
-}
-
-async function submitFeedback() {
-const feedback = document.getElementById('feedback').value;
-const resp = await fetch('/feedback', {
-method: 'POST',
-headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ user_id: userId, content: feedback })
-});
-notify((await resp.json()).message);
-}
-
-function toggleTheme() {
-const theme = document.body.dataset.theme === 'dark' ? 'light' : 'dark';
-document.body.dataset.theme = theme;
-localStorage.setItem('theme', theme);
-}
-
-function changeLanguage(lang) {
-localStorage.setItem('language', lang || document.getElementById('languageSelect').value);
-document.querySelectorAll('[data-lang-en]').forEach(el => {
-const key = lang === 'es' ? 'data-lang-es' : 'data-lang-en';
-el.textContent = el.getAttribute(key);
-if (el.placeholder) el.placeholder = el.getAttribute(`${key}-placeholder`);
-});
-}
-
-function logout() {
-localStorage.clear();
-window.location.href = '/';
-}
-
-document.getElementById('jobForm').addEventListener('submit', (e) => {
-e.preventDefault();
-postJob();
-});
-
-window.onload = () => {
-document.body.dataset.theme = localStorage.getItem('theme') || 'light';
-loadDashboard();
-};
-</script>
+        window.onload = () => showTab('gchat');
+    </script>
 </body>
 </html>
