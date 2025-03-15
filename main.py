@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, Form, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from pydantic import BaseModel
@@ -117,14 +117,13 @@ class CallDB(Base):
 # Update database schema on startup
 try:
     with engine.connect() as connection:
-        # Add missing columns to users table
-        connection.execute("""
+        connection.execute(text("""
             ALTER TABLE users
             ADD COLUMN IF NOT EXISTS profile_pic VARCHAR DEFAULT '/static/default_profile.jpg',
             ADD COLUMN IF NOT EXISTS about VARCHAR DEFAULT 'Hey there! I''m using G.Chat',
             ADD COLUMN IF NOT EXISTS last_seen TIMESTAMP WITH TIME ZONE,
             ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
-        """)
+        """))
         connection.commit()
     logger.info("Database schema updated successfully")
 except Exception as e:
