@@ -9,7 +9,7 @@ from typing import Optional, Dict
 import datetime
 import os
 from passlib.context import CryptContext
-import uvicorn
+import uKILLvicorn
 from dotenv import load_dotenv
 import requests
 import logging
@@ -99,6 +99,14 @@ class GroupMemberDB(Base):
     group_id = Column(Integer, ForeignKey("groups.id"))
     user_id = Column(Integer, ForeignKey("users.id"))
 
+class ContactsDB(Base):
+    __tablename__ = "contacts"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    contact_user_id = Column(Integer, ForeignKey("users.id"))
+    contact_email = Column(String)
+    contact_phone = Column(String, nullable=True)
+
 Base.metadata.create_all(bind=engine)
 
 # Pydantic Models
@@ -131,6 +139,11 @@ class Message(BaseModel):
 class Group(BaseModel):
     name: str
     members: list[int]
+
+class Contact(BaseModel):
+    user_id: int
+    contact_email: str
+    contact_phone: Optional[str] = None
 
 # Password Hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -401,12 +414,16 @@ async def get_chat_list(user_id: int, db: Session = Depends(get_db)):
     if user_id <= 0:
         raise HTTPException(status_code=400, detail="Invalid user_id")
     user = db.query(UserDB).filter(UserDB.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
     messages = db.query(MessageDB).filter((MessageDB.sender_id == user_id) | (MessageDB.recipient_id == user_id)).all()
     chat_dict = {}
     for msg in messages:
         other_id = msg.recipient_id if msg.sender_id == user_id else msg.sender_id
         if other_id and other_id not in chat_dict:
             other_user = db.query(UserDB).filter(UserDB.id == other_id).first()
+            if not other_user:
+                continue
             if user.role == 0 and other_user.role == 1 and msg.sender_id != other_id:  # Job seeker only sees employer-initiated chats
                 continue
             chat_dict[other_id] = {
@@ -452,6 +469,50 @@ async def get_group_messages(group_id: int, user_id: int, db: Session = Depends(
         raise HTTPException(status_code=403, detail="Not a group member")
     messages = db.query(MessageDB).filter(MessageDB.group_id == group_id).order_by(MessageDB.sent_at).all()
     return [{"sender_id": m.sender_id, "group_id": m.group_id, "message_type": m.message_type, "content": m.content, "sent_at": m.sent_at.isoformat(), "read_at": m.read_at.isoformat() if m.read_at else None} for m in messages]
+
+# Contacts Endpoints
+@app.post("/contacts/add")
+async def add_contact(contact: Contact, db: Session = Depends(get_db)):
+    if contact.user_id <= 0:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+    user = db.query(UserDB).filter(UserDB.id == contact.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    contact_user = db.query(UserDB).filter((UserDB.email == contact.contact_email) | (UserDB.phone_number == contact.contact_phone)).first()
+    if not contact_user:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    if db.query(ContactsDB).filter_by(user_id=contact.user_id, contact_user_id=contact_user.id).first():
+        raise HTTPException(status_code=400, detail="Contact already exists")
+    last_contact = db.query(ContactsDB).order_by(ContactsDB.id.desc()).first()
+    contact_id = (last_contact.id + 1) if last_contact else 1
+    db_contact = ContactsDB(
+        id=contact_id,
+        user_id=contact.user_id,
+        contact_user_id=contact_user.id,
+        contact_email=contact_user.email,
+        contact_phone=contact_user.phone_number
+    )
+    db.add(db_contact)
+    db.commit()
+    return {"message": "Contact added", "contact_id": contact_id}
+
+@app.get("/contacts/list")
+async def list_contacts(user_id: int, db: Session = Depends(get_db)):
+    if user_id <= 0:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+    contacts = db.query(ContactsDB).filter(ContactsDB.user_id == user_id).all()
+    return [{"contact_user_id": c.contact_user_id, "email": c.contact_email, "phone": c.contact_phone} for c in contacts]
+
+@app.post("/contacts/remove")
+async def remove_contact(user_id: int = Form(...), contact_user_id: int = Form(...), db: Session = Depends(get_db)):
+    if user_id <= 0 or contact_user_id <= 0:
+        raise HTTPException(status_code=400, detail="Invalid user_id or contact_user_id")
+    contact = db.query(ContactsDB).filter_by(user_id=user_id, contact_user_id=contact_user_id).first()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    db.delete(contact)
+    db.commit()
+    return {"message": "Contact removed"}
 
 @app.get("/", response_class=HTMLResponse)
 async def login_page():

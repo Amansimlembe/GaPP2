@@ -33,10 +33,10 @@
         h2, h3 { color: var(--text); }
         button { padding: 10px 20px; background: var(--primary); color: white; border: none; border-radius: 5px; cursor: pointer; transition: background 0.3s; }
         button:hover { background: #0056b3; }
-        .job-card, .chat-card { padding: 15px; margin-bottom: 10px; background: var(--bg); border-radius: 5px; box-shadow: var(--shadow); transition: transform 0.2s; }
-        .job-card:hover { transform: scale(1.02); }
-        .chat-area { height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; background: var(--bg); }
-        .message { padding: 10px; margin: 5px 0; border-radius: 5px; max-width: 70%; }
+        .job-card, .chat-card, .contact-card { padding: 15px; margin-bottom: 10px; background: var(--bg); border-radius: 5px; box-shadow: var(--shadow); transition: transform 0.2s; }
+        .job-card:hover, .chat-card:hover, .contact-card:hover { transform: scale(1.02); }
+        .chat-area { height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; background: var(--bg); display: flex; flex-direction: column; }
+        .message { padding: 10px; margin: 5px 0; border-radius: 5px; max-width: 70%; word-wrap: break-word; }
         .message.sent { background: var(--sent-bg); align-self: flex-end; }
         .message.received { background: var(--received-bg); align-self: flex-start; }
         .message-input { display: flex; gap: 10px; }
@@ -48,7 +48,7 @@
         @media (max-width: 768px) {
             .tabs { flex-direction: column; }
             .container { padding: 10px; }
-            .job-card, .chat-card { padding: 10px; }
+            .job-card, .chat-card, .contact-card { padding: 10px; }
         }
     </style>
 </head>
@@ -59,6 +59,7 @@
             <div class="tab" onclick="showTab('jobs')">Job Matches</div>
             <div class="tab" onclick="showTab('applications')">Applications</div>
             <div class="tab" onclick="showTab('chats')">Chats</div>
+            <div class="tab" onclick="showTab('interviews')">Interviews</div>
         </div>
         <div id="profile" class="tab-content active">
             <h2>Profile</h2>
@@ -84,6 +85,7 @@
                 <div class="tab active" onclick="showChatTab('employer')">Employer Chats</div>
                 <div class="tab" onclick="showChatTab('users')">User Chats</div>
                 <div class="tab" onclick="showChatTab('groups')">Group Chats</div>
+                <div class="tab" onclick="showChatTab('contacts')">Contacts</div>
             </div>
             <div id="employer" class="chat-tab-content active">
                 <h3>Employer Chats</h3>
@@ -91,8 +93,6 @@
             </div>
             <div id="users" class="chat-tab-content">
                 <h3>User Chats</h3>
-                <input type="text" id="userPhone" placeholder="Enter phone number">
-                <button onclick="startUserChat()">Start Chat</button>
                 <div id="userChatList"></div>
             </div>
             <div id="groups" class="chat-tab-content">
@@ -102,17 +102,26 @@
                 <button onclick="createGroup()">Create Group</button>
                 <div id="groupList"></div>
             </div>
+            <div id="contacts" class="chat-tab-content">
+                <h3>Contacts</h3>
+                <input type="text" id="contactInput" placeholder="Enter email or phone number">
+                <button onclick="addContact()">Add Contact</button>
+                <div id="contactList"></div>
+            </div>
             <div class="chat-area" id="messages"></div>
             <div class="message-input">
                 <input type="text" id="messageInput" placeholder="Type a message" oninput="showTyping()">
                 <input type="file" id="mediaInput" accept="image/*,audio/*,video/*">
-                <button onclick="sendMessage('text')">Send Text</button>
+                <button onclick="sendMessage('text')">Send</button>
                 <button onclick="sendMessage('media')">Send Media</button>
             </div>
-            <h3>Video Interview</h3>
+        </div>
+        <div id="interviews" class="tab-content">
+            <h3>Video Interviews</h3>
+            <input type="text" id="interviewTarget" placeholder="Enter Employer ID">
+            <button onclick="startVideoCall()">Start Interview</button>
             <video id="localVideo" autoplay muted></video>
             <video id="remoteVideo" autoplay></video>
-            <button onclick="startVideoCall()">Start Call</button>
         </div>
     </div>
     <div id="notifications"></div>
@@ -139,6 +148,7 @@
             if (tabId === 'employer') loadChatList('employer');
             if (tabId === 'users') loadChatList('users');
             if (tabId === 'groups') loadGroups();
+            if (tabId === 'contacts') loadContacts();
         }
 
         async function loadDashboard() {
@@ -205,12 +215,17 @@
         }
 
         async function loadChatList(type) {
-            const resp = await fetch(`/chat_list?user_id=${userId}`);
-            const chats = await resp.json();
-            const listId = type === 'employer' ? 'employerChatList' : 'userChatList';
-            document.getElementById(listId).innerHTML = chats.map(chat => `
-                <div class="chat-card" onclick="loadMessages(${chat.user_id}, '${type}')">${chat.email} ${chat.unread ? '(Unread)' : ''}</div>
-            `).join('');
+            try {
+                const resp = await fetch(`/chat_list?user_id=${userId}`);
+                const chats = await resp.json();
+                const listId = type === 'employer' ? 'employerChatList' : 'userChatList';
+                document.getElementById(listId).innerHTML = chats.map(chat => {
+                    const firstName = chat.email.split('@')[0].split(/[^a-zA-Z]/)[0];
+                    return `<div class="chat-card" onclick="loadMessages(${chat.user_id}, '${type}')">${firstName} ${chat.unread ? '(Unread)' : ''}</div>`;
+                }).join('');
+            } catch (e) {
+                notify(`Failed to load ${type} chats: ${e.message}`);
+            }
         }
 
         async function loadGroups() {
@@ -219,6 +234,20 @@
             document.getElementById('groupList').innerHTML = groups.map(group => `
                 <div class="chat-card" onclick="loadGroupMessages(${group.id})">${group.name}</div>
             `).join('');
+        }
+
+        async function loadContacts() {
+            const resp = await fetch(`/contacts/list?user_id=${userId}`);
+            const contacts = await resp.json();
+            document.getElementById('contactList').innerHTML = contacts.map(contact => {
+                const firstName = contact.email.split('@')[0].split(/[^a-zA-Z]/)[0];
+                return `
+                    <div class="contact-card">
+                        ${firstName} (${contact.email})
+                        <button onclick="loadMessages(${contact.contact_user_id}, 'users')">Chat</button>
+                        <button onclick="removeContact(${contact.contact_user_id})">Remove</button>
+                    </div>`;
+            }).join('');
         }
 
         async function loadMessages(recipientId, type) {
@@ -260,10 +289,12 @@
             };
             if (type === 'text') {
                 msg.content = document.getElementById('messageInput').value;
+                if (!msg.content) return;
                 socket.send(JSON.stringify(msg));
                 document.getElementById('messageInput').value = '';
             } else {
                 const file = document.getElementById('mediaInput').files[0];
+                if (!file) return notify('Select a file');
                 const reader = new FileReader();
                 reader.onload = () => {
                     msg.message_type = file.type.split('/')[0];
@@ -330,29 +361,46 @@
             loadGroups();
         }
 
-        async function startUserChat() {
-            const phone = document.getElementById('userPhone').value;
-            const resp = await fetch(`/chat_list?user_id=${userId}`);
-            const users = await resp.json();
-            const target = users.find(u => u.phone_number === phone);
-            if (target) loadMessages(target.user_id, 'users');
-            else notify('User not found');
+        async function addContact() {
+            const contactInput = document.getElementById('contactInput').value;
+            const resp = await fetch('/contacts/add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId, contact_email: contactInput, contact_phone: contactInput.includes('@') ? null : contactInput })
+            });
+            const data = await resp.json();
+            notify(data.message);
+            loadContacts();
+        }
+
+        async function removeContact(contactUserId) {
+            const resp = await fetch('/contacts/remove', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ user_id: userId, contact_user_id: contactUserId })
+            });
+            notify((await resp.json()).message);
+            loadContacts();
         }
 
         async function startVideoCall() {
-            const target = localStorage.getItem('chatTarget');
-            if (!target || target.startsWith('group_')) return notify('Select a 1:1 chat');
-            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-            document.getElementById('localVideo').srcObject = localStream;
-            peer = new RTCPeerConnection();
-            localStream.getTracks().forEach(track => peer.addTrack(track, localStream));
-            peer.ontrack = (event) => document.getElementById('remoteVideo').srcObject = event.streams[0];
-            peer.onicecandidate = (event) => {
-                if (event.candidate) socket.send(JSON.stringify({ type: 'webrtc_signal', signal: event.candidate, to: target, room: `${userId}-${target}` }));
-            };
-            const offer = await peer.createOffer();
-            await peer.setLocalDescription(offer);
-            socket.send(JSON.stringify({ type: 'webrtc_signal', signal: offer, to: target, room: `${userId}-${target}` }));
+            const target = document.getElementById('interviewTarget').value;
+            if (!target) return notify('Enter an employer ID');
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                document.getElementById('localVideo').srcObject = localStream;
+                peer = new RTCPeerConnection();
+                localStream.getTracks().forEach(track => peer.addTrack(track, localStream));
+                peer.ontrack = (event) => document.getElementById('remoteVideo').srcObject = event.streams[0];
+                peer.onicecandidate = (event) => {
+                    if (event.candidate) socket.send(JSON.stringify({ type: 'webrtc_signal', signal: event.candidate, to: target, room: `${userId}-${target}` }));
+                };
+                const offer = await peer.createOffer();
+                await peer.setLocalDescription(offer);
+                socket.send(JSON.stringify({ type: 'webrtc_signal', signal: offer, to: target, room: `${userId}-${target}` }));
+            } catch (e) {
+                notify(`Failed to start video: ${e.message}`);
+            }
         }
 
         async function handleSignal(msg) {
