@@ -5,7 +5,7 @@ from sqlalchemy import create_engine, Column, Integer, String, DateTime, Foreign
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from pydantic import BaseModel
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 import datetime
 import os
 from passlib.context import CryptContext
@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 import requests
 import logging
 import asyncio
+import json
 
 load_dotenv()
 
@@ -46,6 +47,7 @@ class UserDB(Base):
     phone_number = Column(String, unique=True)
     password = Column(String)
     role = Column(Integer)
+    language = Column(String, default="en")
     created_at = Column(DateTime, default=datetime.datetime.now(datetime.timezone.utc))
 
 class JobDB(Base):
@@ -74,6 +76,7 @@ class JobApplicationDB(Base):
     id = Column(Integer, primary_key=True, index=True)
     job_id = Column(Integer, ForeignKey("jobs.id"))
     user_id = Column(Integer, ForeignKey("users.id"))
+    status = Column(String, default="Submitted")  # New field for status tracking
     applied_at = Column(DateTime, default=datetime.datetime.now(datetime.timezone.utc))
 
 class MessageDB(Base):
@@ -91,6 +94,7 @@ class GroupDB(Base):
     __tablename__ = "groups"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String)
+    category = Column(String, nullable=True)  # New field for industry-specific groups
     created_by = Column(Integer, ForeignKey("users.id"))
 
 class GroupMemberDB(Base):
@@ -107,6 +111,20 @@ class ContactsDB(Base):
     contact_email = Column(String)
     contact_phone = Column(String, nullable=True)
 
+class BadgeDB(Base):  # New table for gamification
+    __tablename__ = "badges"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    badge_name = Column(String)
+    awarded_at = Column(DateTime, default=datetime.datetime.now(datetime.timezone.utc))
+
+class FeedbackDB(Base):  # New table for feedback
+    __tablename__ = "feedback"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    content = Column(String)
+    submitted_at = Column(DateTime, default=datetime.datetime.now(datetime.timezone.utc))
+
 Base.metadata.create_all(bind=engine)
 
 # Pydantic Models
@@ -115,6 +133,7 @@ class User(BaseModel):
     phone_number: str
     password: str
     role: int
+    language: Optional[str] = "en"
 
 class Job(BaseModel):
     user_id: int
@@ -128,6 +147,7 @@ class Job(BaseModel):
 class JobApplication(BaseModel):
     job_id: int
     user_id: int
+    status: Optional[str] = "Submitted"
 
 class Message(BaseModel):
     sender_id: int
@@ -138,12 +158,27 @@ class Message(BaseModel):
 
 class Group(BaseModel):
     name: str
-    members: list[int]
+    category: Optional[str] = None
+    members: List[int]
 
 class Contact(BaseModel):
     user_id: int
     contact_email: str
     contact_phone: Optional[str] = None
+
+class Feedback(BaseModel):
+    user_id: int
+    content: str
+
+class InterviewSchedule(BaseModel):
+    employer_id: int
+    jobseeker_id: int
+    job_id: int
+    time: str
+
+class NotificationSubscription(BaseModel):
+    user_id: int
+    channel: str  # "email" or "sms"
 
 # Password Hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -248,7 +283,8 @@ async def register(user: User, db: Session = Depends(get_db)):
             email=user.email,
             phone_number=user.phone_number,
             password=hashed_password,
-            role=user.role
+            role=user.role,
+            language=user.language
         )
         db.add(db_user)
         db.commit()
@@ -256,6 +292,10 @@ async def register(user: User, db: Session = Depends(get_db)):
         if user.role == 0:
             db_jobseeker = JobSeekerDB(user_id=user_id, email=user.email)
             db.add(db_jobseeker)
+            db.commit()
+            # Award "Newbie" badge
+            db_badge = BadgeDB(user_id=user_id, badge_name="Newbie")
+            db.add(db_badge)
             db.commit()
         
         logger.info(f"User {user_id} registered successfully")
@@ -271,7 +311,7 @@ async def login(username: str = Form(...), password: str = Form(...), db: Sessio
     user = db.query(UserDB).filter((UserDB.email == username) | (UserDB.phone_number == username)).first()
     if not user or not verify_password(password, user.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    return {"user_id": user.id, "role": user.role}
+    return {"user_id": user.id, "role": user.role, "language": user.language}
 
 @app.post("/employer/post_job")
 async def post_job(job: Job, db: Session = Depends(get_db)):
@@ -297,13 +337,13 @@ async def post_job(job: Job, db: Session = Depends(get_db)):
     return {"message": "Job posted successfully"}
 
 @app.get("/jobs/ai_fetched")
-async def ai_fetched_jobs():
+async def ai_fetched_jobs(db: Session = Depends(get_db)):
     try:
-        response = requests.get("https://api.github.com/repos/github/jobs/contents/sample_jobs.json")
-        if response.status_code == 200:
-            jobs = response.json()
-            return [{"title": job["name"], "description": "Sample job", "requirements": "N/A", "deadline": "N/A", "employer_email": "ai@example.com"} for job in jobs[:5]]
-        return [{"title": f"AI Job {i}", "description": "Sample AI job", "requirements": "N/A", "deadline": "N/A", "employer_email": "ai@example.com"} for i in range(1, 6)]
+        # Mock LinkedIn API fetch
+        return [
+            {"title": "Software Engineer", "description": "Remote role at TechCo", "requirements": "Python, 3+ years", "deadline": "2025-04-01", "employer_email": "hr@techco.com"},
+            {"title": "Data Analyst", "description": "Full-time at DataCorp", "requirements": "SQL, Python", "deadline": "2025-03-30", "employer_email": "jobs@datacorp.com"}
+        ]
     except Exception as e:
         logger.error(f"AI job fetch failed: {e}")
         return []
@@ -319,12 +359,17 @@ async def apply_for_job(application: JobApplication, db: Session = Depends(get_d
         raise HTTPException(status_code=400, detail="Already applied")
     last_app = db.query(JobApplicationDB).order_by(JobApplicationDB.id.desc()).first()
     app_id = (last_app.id + 1) if last_app else 1
-    db_app = JobApplicationDB(id=app_id, job_id=application.job_id, user_id=application.user_id)
+    db_app = JobApplicationDB(id=app_id, job_id=application.job_id, user_id=application.user_id, status=application.status)
     db.add(db_app)
     db.commit()
     employer = db.query(JobDB).filter(JobDB.id == application.job_id).first().user_id
     if employer in active_connections:
         await active_connections[employer].send_json({"type": "notification", "message": f"New application for job {application.job_id}"})
+    # Award "First Apply" badge if first application
+    if not db.query(JobApplicationDB).filter_by(user_id=application.user_id).count() > 1:
+        db_badge = BadgeDB(user_id=application.user_id, badge_name="First Apply")
+        db.add(db_badge)
+        db.commit()
     return {"message": "Application submitted"}
 
 @app.post("/jobseeker/update_cv")
@@ -338,7 +383,9 @@ async def update_cv(user_id: int = Form(...), cv: UploadFile = File(...), db: Se
     os.makedirs("uploads", exist_ok=True)
     with open(cv_path, "wb") as f:
         f.write(await cv.read())
-    skills = "Python, JavaScript"  # Placeholder for AI enhancement
+    # Mock AI enhancement
+    skills = "Python, JavaScript, SQL"  # Enhanced AI suggestion
+    suggestions = {"formatting": "Use bullet points", "skills": "Add 'Data Analysis'"}
     db_jobseeker = db.query(JobSeekerDB).filter(JobSeekerDB.user_id == user_id).first()
     if not db_jobseeker:
         db_jobseeker = JobSeekerDB(user_id=user_id, email=user.email, cv_path=cv_path, skills=skills)
@@ -347,15 +394,19 @@ async def update_cv(user_id: int = Form(...), cv: UploadFile = File(...), db: Se
         db_jobseeker.cv_path = cv_path
         db_jobseeker.skills = skills
     db.commit()
-    return {"message": "CV updated", "skills": skills}
+    # Award "Profile Pro" badge
+    db_badge = BadgeDB(user_id=user_id, badge_name="Profile Pro")
+    db.add(db_badge)
+    db.commit()
+    return {"message": "CV updated", "skills": skills, "suggestions": suggestions}
 
 @app.post("/groups/create")
-async def create_group(user_id: int = Form(...), name: str = Form(...), members: str = Form(...), db: Session = Depends(get_db)):
+async def create_group(user_id: int = Form(...), name: str = Form(...), category: str = Form(...), members: str = Form(...), db: Session = Depends(get_db)):
     if user_id <= 0:
         raise HTTPException(status_code=400, detail="Invalid user_id")
     last_group = db.query(GroupDB).order_by(GroupDB.id.desc()).first()
     group_id = (last_group.id + 1) if last_group else 1
-    db_group = GroupDB(id=group_id, name=name, created_by=user_id)
+    db_group = GroupDB(id=group_id, name=name, category=category, created_by=user_id)
     db.add(db_group)
     db.commit()
     member_ids = [user_id] + [int(m) for m in members.split(",") if m]
@@ -388,10 +439,12 @@ async def jobseeker_dashboard(user_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=403, detail="Not authorized")
     jobs = db.query(JobDB).filter(JobDB.status == "active").all()
     applications = db.query(JobApplicationDB).filter(JobApplicationDB.user_id == user_id).all()
+    badges = db.query(BadgeDB).filter(BadgeDB.user_id == user_id).all()
     return {
         "user_id": user_id,
         "jobs": [{"id": j.id, "title": j.title, "description": j.description, "requirements": j.requirements, "deadline": j.deadline} for j in jobs],
-        "applications": [a.job_id for a in applications]
+        "applications": [{"job_id": a.job_id, "status": a.status} for a in applications],
+        "badges": [{"name": b.badge_name, "awarded_at": b.awarded_at.isoformat()} for b in badges]
     }
 
 @app.get("/employer/dashboard")
@@ -401,12 +454,14 @@ async def employer_dashboard(user_id: int, db: Session = Depends(get_db)):
     user = db.query(UserDB).filter(UserDB.id == user_id).first()
     if not user or user.role != 1:
         raise HTTPException(status_code=403, detail="Not authorized")
-    jobs = db.query(JobDB).filter(JobDB.user_id == user_id).all()
+    jobs = db.query(JobDB).filter(JobDB.id == user_id).all()
     applications = db.query(JobApplicationDB).join(JobDB, JobApplicationDB.job_id == JobDB.id).filter(JobDB.user_id == user_id).all()
+    badges = db.query(BadgeDB).filter(BadgeDB.user_id == user_id).all()
     return {
         "user_id": user_id,
         "jobs": [{"id": j.id, "title": j.title, "description": j.description} for j in jobs],
-        "applications": [{"job_id": a.job_id, "user_id": a.user_id, "applied_at": a.applied_at.isoformat()} for a in applications]
+        "applications": [{"job_id": a.job_id, "user_id": a.user_id, "status": a.status, "applied_at": a.applied_at.isoformat()} for a in applications],
+        "badges": [{"name": b.badge_name, "awarded_at": b.awarded_at.isoformat()} for b in badges]
     }
 
 @app.get("/chat_list")
@@ -424,7 +479,7 @@ async def get_chat_list(user_id: int, db: Session = Depends(get_db)):
             other_user = db.query(UserDB).filter(UserDB.id == other_id).first()
             if not other_user:
                 continue
-            if user.role == 0 and other_user.role == 1 and msg.sender_id != other_id:  # Job seeker only sees employer-initiated chats
+            if user.role == 0 and other_user.role == 1 and msg.sender_id != other_id:
                 continue
             chat_dict[other_id] = {
                 "user_id": other_id,
@@ -441,7 +496,7 @@ async def get_messages(recipient_id: int, user_id: int, db: Session = Depends(ge
         raise HTTPException(status_code=400, detail="Invalid user_id")
     user = db.query(UserDB).filter(UserDB.id == user_id).first()
     recipient = db.query(UserDB).filter(UserDB.id == recipient_id).first()
-    if user.role == 0 and recipient.role == 1:  # Job seeker checks employer initiation
+    if user.role == 0 and recipient.role == 1:
         first_msg = db.query(MessageDB).filter(
             ((MessageDB.sender_id == user_id) & (MessageDB.recipient_id == recipient_id)) |
             ((MessageDB.sender_id == recipient_id) & (MessageDB.recipient_id == user_id))
@@ -459,7 +514,7 @@ async def get_groups(user_id: int, db: Session = Depends(get_db)):
     if user_id <= 0:
         raise HTTPException(status_code=400, detail="Invalid user_id")
     groups = db.query(GroupDB).join(GroupMemberDB, GroupDB.id == GroupMemberDB.group_id).filter(GroupMemberDB.user_id == user_id).all()
-    return [{"id": g.id, "name": g.name} for g in groups]
+    return [{"id": g.id, "name": g.name, "category": g.category} for g in groups]
 
 @app.get("/messages/group/{group_id}")
 async def get_group_messages(group_id: int, user_id: int, db: Session = Depends(get_db)):
@@ -513,6 +568,60 @@ async def remove_contact(user_id: int = Form(...), contact_user_id: int = Form(.
     db.delete(contact)
     db.commit()
     return {"message": "Contact removed"}
+
+# New Endpoints
+@app.post("/feedback")
+async def submit_feedback(feedback: Feedback, db: Session = Depends(get_db)):
+    db_feedback = FeedbackDB(user_id=feedback.user_id, content=feedback.content)
+    db.add(db_feedback)
+    db.commit()
+    return {"message": "Feedback submitted"}
+
+@app.get("/jobs/advanced_match")
+async def advanced_job_match(user_id: int, db: Session = Depends(get_db)):
+    jobseeker = db.query(JobSeekerDB).filter(JobSeekerDB.user_id == user_id).first()
+    if not jobseeker:
+        raise HTTPException(status_code=404, detail="Job seeker not found")
+    skills = jobseeker.skills.split(", ") if jobseeker.skills else []
+    jobs = db.query(JobDB).filter(JobDB.status == "active").all()
+    # Mock advanced AI matching
+    matched_jobs = [
+        {"id": j.id, "title": j.title, "description": j.description, "match_score": sum(1 for s in skills if s in j.requirements) * 20}
+        for j in jobs if any(s in j.requirements for s in skills)
+    ]
+    return sorted(matched_jobs, key=lambda x: x["match_score"], reverse=True)
+
+@app.post("/schedule_interview")
+async def schedule_interview(schedule: InterviewSchedule, db: Session = Depends(get_db)):
+    # Mock calendar sync
+    employer = db.query(UserDB).filter(UserDB.id == schedule.employer_id).first()
+    jobseeker = db.query(UserDB).filter(UserDB.id == schedule.jobseeker_id).first()
+    if employer.role != 1 or jobseeker.role != 0:
+        raise HTTPException(status_code=403, detail="Invalid roles")
+    if schedule.jobseeker_id in active_connections:
+        await active_connections[schedule.jobseeker_id].send_json({
+            "type": "notification",
+            "message": f"Interview scheduled for job {schedule.job_id} at {schedule.time}"
+        })
+    return {"message": "Interview scheduled", "details": schedule.dict()}
+
+@app.post("/generate_cover_letter")
+async def generate_cover_letter(job_id: int = Form(...), user_id: int = Form(...), db: Session = Depends(get_db)):
+    job = db.query(JobDB).filter(JobDB.id == job_id).first()
+    jobseeker = db.query(JobSeekerDB).filter(JobSeekerDB.user_id == user_id).first()
+    if not job or not jobseeker:
+        raise HTTPException(status_code=404, detail="Job or job seeker not found")
+    # Mock AI cover letter
+    cover_letter = f"Dear Hiring Manager,\n\nI am excited to apply for the {job.title} position at {job.company_name or 'your company'}. My skills in {jobseeker.skills} align well with the requirements.\n\nSincerely,\n{jobseeker.email}"
+    return {"cover_letter": cover_letter}
+
+@app.post("/subscribe_notifications")
+async def subscribe_notifications(subscription: NotificationSubscription, db: Session = Depends(get_db)):
+    user = db.query(UserDB).filter(UserDB.id == subscription.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    # Mock notification subscription
+    return {"message": f"Subscribed to {subscription.channel} notifications"}
 
 @app.get("/", response_class=HTMLResponse)
 async def login_page():

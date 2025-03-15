@@ -25,101 +25,116 @@
         }
         body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: var(--secondary); color: var(--text); transition: all 0.3s; }
         .container { max-width: 1200px; margin: auto; }
-        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
-        .tab { padding: 10px 20px; background: var(--bg); border-radius: 5px 5px 0 0; cursor: pointer; transition: background 0.3s; }
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .tab { padding: 10px 20px; background: var(--bg); border-radius: 5px 5px 0 0; cursor: pointer; transition: background 0.3s, transform 0.2s; }
+        .tab:hover { transform: scale(1.05); }
         .tab.active { background: var(--primary); color: white; }
         .tab-content { display: none; background: var(--bg); padding: 20px; border-radius: 0 5px 5px 5px; box-shadow: var(--shadow); }
         .tab-content.active { display: block; animation: fadeIn 0.5s; }
         h2, h3 { color: var(--text); }
-        button { padding: 10px 20px; background: var(--primary); color: white; border: none; border-radius: 5px; cursor: pointer; transition: background 0.3s; }
-        button:hover { background: #0056b3; }
+        button { padding: 10px 20px; background: var(--primary); color: white; border: none; border-radius: 5px; cursor: pointer; transition: background 0.3s, transform 0.2s; }
+        button:hover { background: #0056b3; transform: scale(1.05); }
         .job-card, .chat-card, .contact-card { padding: 15px; margin-bottom: 10px; background: var(--bg); border-radius: 5px; box-shadow: var(--shadow); transition: transform 0.2s; }
         .job-card:hover, .chat-card:hover, .contact-card:hover { transform: scale(1.02); }
         .chat-area { height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; background: var(--bg); display: flex; flex-direction: column; }
-        .message { padding: 10px; margin: 5px 0; border-radius: 5px; max-width: 70%; word-wrap: break-word; }
+        .message { padding: 10px; margin: 5px 0; border-radius: 5px; max-width: 70%; word-wrap: break-word; animation: slideInMessage 0.3s; }
         .message.sent { background: var(--sent-bg); align-self: flex-end; }
         .message.received { background: var(--received-bg); align-self: flex-start; }
-        .message-input { display: flex; gap: 10px; }
-        input[type="text"], input[type="file"] { padding: 10px; border: 1px solid #ddd; border-radius: 5px; flex-grow: 1; }
+        .message-input { display: flex; gap: 10px; flex-wrap: wrap; }
+        input[type="text"], input[type="file"], select { padding: 10px; border: 1px solid #ddd; border-radius: 5px; flex-grow: 1; }
         video { width: 100%; max-width: 400px; border-radius: 5px; }
         .notification { position: fixed; top: 20px; right: 20px; padding: 10px 20px; background: var(--primary); color: white; border-radius: 5px; box-shadow: var(--shadow); animation: slideIn 0.5s; }
+        .badge { display: inline-block; padding: 5px 10px; background: #28a745; color: white; border-radius: 15px; margin: 5px; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideIn { from { right: -100%; } to { right: 20px; } }
+        @keyframes slideInMessage { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         @media (max-width: 768px) {
             .tabs { flex-direction: column; }
             .container { padding: 10px; }
             .job-card, .chat-card, .contact-card { padding: 10px; }
+            .message-input { flex-direction: column; }
         }
     </style>
 </head>
 <body>
     <div class="container">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+            <select id="languageSelect" onchange="changeLanguage()">
+                <option value="en">English</option>
+                <option value="es">Español</option>
+            </select>
+            <button onclick="toggleTheme()">Toggle Theme</button>
+        </div>
         <div class="tabs">
-            <div class="tab active" onclick="showTab('profile')">Profile</div>
-            <div class="tab" onclick="showTab('jobs')">Job Matches</div>
-            <div class="tab" onclick="showTab('applications')">Applications</div>
-            <div class="tab" onclick="showTab('chats')">Chats</div>
-            <div class="tab" onclick="showTab('interviews')">Interviews</div>
+            <div class="tab active" onclick="showTab('profile')" data-lang-en="Profile" data-lang-es="Perfil">Profile</div>
+            <div class="tab" onclick="showTab('jobs')" data-lang-en="Job Matches" data-lang-es="Coincidencias de Trabajo">Job Matches</div>
+            <div class="tab" onclick="showTab('applications')" data-lang-en="Applications" data-lang-es="Solicitudes">Applications</div>
+            <div class="tab" onclick="showTab('chats')" data-lang-en="Chats" data-lang-es="Chats">Chats</div>
+            <div class="tab" onclick="showTab('interviews')" data-lang-en="Interviews" data-lang-es="Entrevistas">Interviews</div>
         </div>
         <div id="profile" class="tab-content active">
-            <h2>Profile</h2>
-            <button onclick="toggleTheme()">Toggle Theme</button>
-            <button onclick="logout()">Logout</button>
-            <h3>Upload CV</h3>
+            <h2 data-lang-en="Profile" data-lang-es="Perfil">Profile</h2>
+            <button onclick="logout()" data-lang-en="Logout" data-lang-es="Cerrar Sesión">Logout</button>
+            <h3 data-lang-en="Badges" data-lang-es="Insignias">Badges</h3>
+            <div id="badges"></div>
+            <h3 data-lang-en="Upload CV" data-lang-es="Subir CV">Upload CV</h3>
             <input type="file" id="cvInput" accept=".pdf">
-            <button onclick="uploadCV()">Upload & Enhance</button>
-            <h3>Feedback</h3>
-            <input type="text" id="feedback" placeholder="Your feedback...">
-            <button onclick="submitFeedback()">Submit</button>
+            <button onclick="uploadCV()" data-lang-en="Upload & Enhance" data-lang-es="Subir y Mejorar">Upload & Enhance</button>
+            <div id="cvSuggestions"></div>
+            <h3 data-lang-en="Feedback" data-lang-es="Comentarios">Feedback</h3>
+            <input type="text" id="feedback" placeholder="Your feedback..." data-lang-en-placeholder="Your feedback..." data-lang-es-placeholder="Tus comentarios...">
+            <button onclick="submitFeedback()" data-lang-en="Submit" data-lang-es="Enviar">Submit</button>
         </div>
         <div id="jobs" class="tab-content">
-            <h3>Matching Jobs</h3>
+            <h3 data-lang-en="Matching Jobs" data-lang-es="Trabajos Coincidentes">Matching Jobs</h3>
             <div id="jobList"></div>
         </div>
         <div id="applications" class="tab-content">
-            <h3>Your Applications</h3>
+            <h3 data-lang-en="Your Applications" data-lang-es="Tus Solicitudes">Your Applications</h3>
             <div id="applicationList"></div>
         </div>
         <div id="chats" class="tab-content">
             <div class="tabs">
-                <div class="tab active" onclick="showChatTab('employer')">Employer Chats</div>
-                <div class="tab" onclick="showChatTab('users')">User Chats</div>
-                <div class="tab" onclick="showChatTab('groups')">Group Chats</div>
-                <div class="tab" onclick="showChatTab('contacts')">Contacts</div>
+                <div class="tab active" onclick="showChatTab('employer')" data-lang-en="Employer Chats" data-lang-es="Chats con Empleadores">Employer Chats</div>
+                <div class="tab" onclick="showChatTab('users')" data-lang-en="User Chats" data-lang-es="Chats con Usuarios">User Chats</div>
+                <div class="tab" onclick="showChatTab('groups')" data-lang-en="Group Chats" data-lang-es="Chats de Grupo">Group Chats</div>
+                <div class="tab" onclick="showChatTab('contacts')" data-lang-en="Contacts" data-lang-es="Contactos">Contacts</div>
             </div>
             <div id="employer" class="chat-tab-content active">
-                <h3>Employer Chats</h3>
+                <h3 data-lang-en="Employer Chats" data-lang-es="Chats con Empleadores">Employer Chats</h3>
                 <div id="employerChatList"></div>
             </div>
             <div id="users" class="chat-tab-content">
-                <h3>User Chats</h3>
+                <h3 data-lang-en="User Chats" data-lang-es="Chats con Usuarios">User Chats</h3>
                 <div id="userChatList"></div>
             </div>
             <div id="groups" class="chat-tab-content">
-                <h3>Group Chats</h3>
-                <input type="text" id="groupName" placeholder="Group Name">
-                <input type="text" id="groupMembers" placeholder="User IDs (comma-separated)">
-                <button onclick="createGroup()">Create Group</button>
+                <h3 data-lang-en="Group Chats" data-lang-es="Chats de Grupo">Group Chats</h3>
+                <input type="text" id="groupName" placeholder="Group Name" data-lang-en-placeholder="Group Name" data-lang-es-placeholder="Nombre del Grupo">
+                <input type="text" id="groupCategory" placeholder="Category (e.g., Tech)" data-lang-en-placeholder="Category (e.g., Tech)" data-lang-es-placeholder="Categoría (ej., Tecnología)">
+                <input type="text" id="groupMembers" placeholder="User IDs (comma-separated)" data-lang-en-placeholder="User IDs (comma-separated)" data-lang-es-placeholder="IDs de Usuarios (separados por comas)">
+                <button onclick="createGroup()" data-lang-en="Create Group" data-lang-es="Crear Grupo">Create Group</button>
                 <div id="groupList"></div>
             </div>
             <div id="contacts" class="chat-tab-content">
-                <h3>Contacts</h3>
-                <input type="text" id="contactInput" placeholder="Enter email or phone number">
-                <button onclick="addContact()">Add Contact</button>
+                <h3 data-lang-en="Contacts" data-lang-es="Contactos">Contacts</h3>
+                <input type="text" id="contactInput" placeholder="Enter email or phone number" data-lang-en-placeholder="Enter email or phone number" data-lang-es-placeholder="Ingresa correo o número de teléfono">
+                <button onclick="addContact()" data-lang-en="Add Contact" data-lang-es="Agregar Contacto">Add Contact</button>
                 <div id="contactList"></div>
             </div>
             <div class="chat-area" id="messages"></div>
             <div class="message-input">
-                <input type="text" id="messageInput" placeholder="Type a message" oninput="showTyping()">
+                <input type="text" id="messageInput" placeholder="Type a message" oninput="showTyping()" data-lang-en-placeholder="Type a message" data-lang-es-placeholder="Escribe un mensaje">
                 <input type="file" id="mediaInput" accept="image/*,audio/*,video/*">
-                <button onclick="sendMessage('text')">Send</button>
-                <button onclick="sendMessage('media')">Send Media</button>
+                <button onclick="sendMessage('text')" data-lang-en="Send" data-lang-es="Enviar">Send</button>
+                <button onclick="sendMessage('media')" data-lang-en="Send Media" data-lang-es="Enviar Multimedia">Send Media</button>
+                <button onclick="sendVoiceMessage()" data-lang-en="Send Voice" data-lang-es="Enviar Voz">Send Voice</button>
             </div>
         </div>
         <div id="interviews" class="tab-content">
-            <h3>Video Interviews</h3>
-            <input type="text" id="interviewTarget" placeholder="Enter Employer ID">
-            <button onclick="startVideoCall()">Start Interview</button>
+            <h3 data-lang-en="Video Interviews" data-lang-es="Entrevistas por Video">Video Interviews</h3>
+            <input type="text" id="interviewTarget" placeholder="Enter Employer ID" data-lang-en-placeholder="Enter Employer ID" data-lang-es-placeholder="Ingresa ID del Empleador">
+            <button onclick="startVideoCall()" data-lang-en="Start Interview" data-lang-es="Iniciar Entrevista">Start Interview</button>
             <video id="localVideo" autoplay muted></video>
             <video id="remoteVideo" autoplay></video>
         </div>
@@ -130,6 +145,10 @@
         const userId = parseInt(localStorage.getItem('userId'));
         const role = parseInt(localStorage.getItem('role'));
         let socket, peer, localStream, cvSkills = [], appliedJobs = new Set();
+        const translations = {
+            en: { logout: "Logout", profile: "Profile", jobs: "Job Matches", applications: "Applications", chats: "Chats", interviews: "Interviews" },
+            es: { logout: "Cerrar Sesión", profile: "Perfil", jobs: "Coincidencias de Trabajo", applications: "Solicitudes", chats: "Chats", interviews: "Entrevistas" }
+        };
 
         function showTab(tabId) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -171,6 +190,8 @@
             loadJobs();
             loadApplications();
             loadChatList('employer');
+            loadBadges();
+            changeLanguage(localStorage.getItem('language') || 'en');
         }
 
         async function loadJobs() {
@@ -178,17 +199,21 @@
             const aiJobs = await aiJobsResp.json();
             const employerJobsResp = await fetch(`/jobseeker/dashboard?user_id=${userId}`);
             const employerJobs = (await employerJobsResp.json()).jobs;
+            const advancedMatchResp = await fetch(`/jobs/advanced_match?user_id=${userId}`);
+            const advancedJobs = await advancedMatchResp.json();
             const externalJobs = await fetchExternalJobs();
-            const allJobs = [...employerJobs, ...aiJobs, ...externalJobs];
+            const allJobs = [...employerJobs, ...aiJobs, ...advancedJobs, ...externalJobs];
             document.getElementById('jobList').innerHTML = allJobs
                 .filter(job => cvSkills.some(skill => job.requirements.includes(skill)) || true)
                 .map(job => `
                     <div class="job-card">
                         <h4>${job.title}</h4>
                         <p>${job.description}</p>
+                        ${job.match_score ? `<p>Match Score: ${job.match_score}%</p>` : ''}
                         <button ${appliedJobs.has(job.id) ? 'disabled' : ''} onclick="applyForJob(${job.id || job._id})">
                             ${appliedJobs.has(job.id) ? 'Applied' : 'Apply'}
                         </button>
+                        <button onclick="oneClickApply(${job.id || job._id})" data-lang-en="One-Click Apply" data-lang-es="Solicitar con un Clic">One-Click Apply</button>
                     </div>
                 `).join('');
         }
@@ -203,15 +228,20 @@
         async function loadApplications() {
             const resp = await fetch(`/jobseeker/dashboard?user_id=${userId}`);
             const data = await resp.json();
-            appliedJobs = new Set(data.applications);
+            appliedJobs = new Set(data.applications.map(a => a.job_id));
             const jobs = data.jobs.filter(j => appliedJobs.has(j.id));
-            document.getElementById('applicationList').innerHTML = jobs.map(job => `
+            document.getElementById('applicationList').innerHTML = data.applications.map(app => `
                 <div class="job-card">
-                    <h4>${job.title}</h4>
-                    <p>${job.description}</p>
-                    <p>Status: Applied</p>
+                    <h4>Job ID: ${app.job_id}</h4>
+                    <p>Status: ${app.status}</p>
                 </div>
             `).join('');
+        }
+
+        async function loadBadges() {
+            const resp = await fetch(`/jobseeker/dashboard?user_id=${userId}`);
+            const data = await resp.json();
+            document.getElementById('badges').innerHTML = data.badges.map(b => `<span class="badge">${b.name}</span>`).join('');
         }
 
         async function loadChatList(type) {
@@ -232,7 +262,7 @@
             const resp = await fetch(`/groups?user_id=${userId}`);
             const groups = await resp.json();
             document.getElementById('groupList').innerHTML = groups.map(group => `
-                <div class="chat-card" onclick="loadGroupMessages(${group.id})">${group.name}</div>
+                <div class="chat-card" onclick="loadGroupMessages(${group.id})">${group.name} (${group.category || 'General'})</div>
             `).join('');
         }
 
@@ -244,8 +274,8 @@
                 return `
                     <div class="contact-card">
                         ${firstName} (${contact.email})
-                        <button onclick="loadMessages(${contact.contact_user_id}, 'users')">Chat</button>
-                        <button onclick="removeContact(${contact.contact_user_id})">Remove</button>
+                        <button onclick="loadMessages(${contact.contact_user_id}, 'users')" data-lang-en="Chat" data-lang-es="Chatear">Chat</button>
+                        <button onclick="removeContact(${contact.contact_user_id})" data-lang-en="Remove" data-lang-es="Eliminar">Remove</button>
                     </div>`;
             }).join('');
         }
@@ -305,6 +335,34 @@
             }
         }
 
+        async function sendVoiceMessage() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const recorder = new MediaRecorder(stream);
+                const chunks = [];
+                recorder.ondataavailable = e => chunks.push(e.data);
+                recorder.onstop = async () => {
+                    const blob = new Blob(chunks, { type: 'audio/webm' });
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        const msg = {
+                            recipient_id: localStorage.getItem('chatTarget')?.startsWith('group_') ? null : parseInt(localStorage.getItem('chatTarget')),
+                            group_id: localStorage.getItem('chatTarget')?.startsWith('group_') ? parseInt(localStorage.getItem('chatTarget').split('_')[1]) : null,
+                            message_type: 'audio',
+                            content: reader.result
+                        };
+                        socket.send(JSON.stringify(msg));
+                    };
+                    reader.readAsDataURL(blob);
+                    stream.getTracks().forEach(track => track.stop());
+                };
+                recorder.start();
+                setTimeout(() => recorder.stop(), 5000); // Record for 5 seconds
+            } catch (e) {
+                notify(`Failed to record voice: ${e.message}`);
+            }
+        }
+
         function appendMessage(msg) {
             document.getElementById('messages').innerHTML += renderMessage(msg);
             document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
@@ -319,20 +377,12 @@
             const resp = await fetch('/jobseeker/update_cv', { method: 'POST', body: formData });
             const data = await resp.json();
             notify(data.message);
-
-            const reader = new FileReader();
-            reader.onload = async () => {
-                const pdf = await pdfjsLib.getDocument({ data: reader.result }).promise;
-                let text = '';
-                for (let i = 1; i <= pdf.numPages; i++) {
-                    const page = await pdf.getPage(i);
-                    const content = await page.getTextContent();
-                    text += content.items.map(item => item.str).join(' ');
-                }
-                cvSkills = text.match(/Python|JavaScript|Java|C\+\+|SQL|HTML|CSS/gi) || ['Python'];
-                loadJobs();
-            };
-            reader.readAsArrayBuffer(file);
+            cvSkills = data.skills.split(', ');
+            document.getElementById('cvSuggestions').innerHTML = `
+                <p>Suggestions:</p>
+                <ul>${Object.entries(data.suggestions).map(([k, v]) => `<li>${k}: ${v}</li>`).join('')}</ul>
+            `;
+            loadJobs();
         }
 
         async function applyForJob(jobId) {
@@ -349,13 +399,33 @@
             notify(data.message);
         }
 
+        async function oneClickApply(jobId) {
+            const coverResp = await fetch('/generate_cover_letter', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ job_id: jobId, user_id: userId })
+            });
+            const coverData = await coverResp.json();
+            const applyResp = await fetch('/jobseeker/apply', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ job_id: jobId, user_id: userId })
+            });
+            const applyData = await applyResp.json();
+            appliedJobs.add(jobId);
+            loadJobs();
+            loadApplications();
+            notify(`${applyData.message} with cover letter`);
+        }
+
         async function createGroup() {
             const name = document.getElementById('groupName').value;
+            const category = document.getElementById('groupCategory').value;
             const members = document.getElementById('groupMembers').value;
             const resp = await fetch('/groups/create', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: new URLSearchParams({ user_id: userId, name, members })
+                body: new URLSearchParams({ user_id: userId, name, category, members })
             });
             notify('Group created');
             loadGroups();
@@ -386,6 +456,12 @@
         async function startVideoCall() {
             const target = document.getElementById('interviewTarget').value;
             if (!target) return notify('Enter an employer ID');
+            const scheduleResp = await fetch('/schedule_interview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ employer_id: target, jobseeker_id: userId, job_id: 1, time: new Date().toISOString() })
+            });
+            notify((await scheduleResp.json()).message);
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 document.getElementById('localVideo').srcObject = localStream;
@@ -441,11 +517,27 @@
 
         async function submitFeedback() {
             const feedback = document.getElementById('feedback').value;
-            notify('Feedback submitted: ' + feedback);
+            const resp = await fetch('/feedback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId, content: feedback })
+            });
+            notify((await resp.json()).message);
         }
 
         function toggleTheme() {
-            document.body.dataset.theme = document.body.dataset.theme === 'dark' ? 'light' : 'dark';
+            const theme = document.body.dataset.theme === 'dark' ? 'light' : 'dark';
+            document.body.dataset.theme = theme;
+            localStorage.setItem('theme', theme);
+        }
+
+        function changeLanguage(lang) {
+            localStorage.setItem('language', lang || document.getElementById('languageSelect').value);
+            document.querySelectorAll('[data-lang-en]').forEach(el => {
+                const key = lang === 'es' ? 'data-lang-es' : 'data-lang-en';
+                el.textContent = el.getAttribute(key);
+                if (el.placeholder) el.placeholder = el.getAttribute(`${key}-placeholder`);
+            });
         }
 
         function logout() {
@@ -453,7 +545,10 @@
             window.location.href = '/';
         }
 
-        window.onload = loadDashboard;
+        window.onload = () => {
+            document.body.dataset.theme = localStorage.getItem('theme') || 'light';
+            loadDashboard();
+        };
     </script>
 </body>
 </html>
