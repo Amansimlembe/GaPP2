@@ -13,6 +13,7 @@ import uvicorn
 from dotenv import load_dotenv
 import requests
 import logging
+import asyncio
 
 load_dotenv()
 
@@ -84,11 +85,13 @@ class MessageDB(Base):
     message_type = Column(String)
     content = Column(String)
     sent_at = Column(DateTime, default=datetime.datetime.now(datetime.timezone.utc))
+    read_at = Column(DateTime, nullable=True)
 
 class GroupDB(Base):
     __tablename__ = "groups"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String)
+    created_by = Column(Integer, ForeignKey("users.id"))
 
 class GroupMemberDB(Base):
     __tablename__ = "group_members"
@@ -113,12 +116,6 @@ class Job(BaseModel):
     deadline: str
     employer_email: str
     company_name: Optional[str] = None
-
-class JobSeeker(BaseModel):
-    user_id: int
-    email: str
-    cv_path: Optional[str] = None
-    skills: Optional[str] = None
 
 class JobApplication(BaseModel):
     job_id: int
@@ -154,6 +151,7 @@ def get_db():
 # WebSocket for Real-Time Messaging
 active_connections: Dict[int, WebSocket] = {}
 webrtc_signals: Dict[str, list] = {}
+typing_users: Dict[int, set] = {}
 
 @app.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: int, db: Session = Depends(get_db)):
@@ -170,6 +168,17 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, db: Session = D
                 for uid, ws in active_connections.items():
                     if uid != user_id and uid in [int(data["to"]) if "to" in data else uid]:
                         await ws.send_json(data)
+            elif "type" in data and data["type"] == "typing":
+                recipient_id = int(data["to"])
+                if recipient_id not in typing_users:
+                    typing_users[recipient_id] = set()
+                typing_users[recipient_id].add(user_id)
+                if recipient_id in active_connections:
+                    await active_connections[recipient_id].send_json({"type": "typing", "from": user_id})
+                await asyncio.sleep(2)
+                typing_users[recipient_id].discard(user_id)
+                if recipient_id in active_connections and user_id not in typing_users.get(recipient_id, set()):
+                    await active_connections[recipient_id].send_json({"type": "stop_typing", "from": user_id})
             else:
                 message = MessageDB(
                     sender_id=user_id,
@@ -187,10 +196,14 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, db: Session = D
                     "group_id": message.group_id,
                     "message_type": message.message_type,
                     "content": message.content,
-                    "sent_at": message.sent_at.isoformat()
+                    "sent_at": message.sent_at.isoformat(),
+                    "read_at": message.read_at.isoformat() if message.read_at else None
                 }
-                if message.recipient_id and message.recipient_id in active_connections:
-                    await active_connections[message.recipient_id].send_json(message_dict)
+                if message.recipient_id:
+                    if message.recipient_id in active_connections:
+                        await active_connections[message.recipient_id].send_json(message_dict)
+                        db.query(MessageDB).filter(MessageDB.id == message.id).update({"read_at": datetime.datetime.now(datetime.timezone.utc)})
+                        db.commit()
                 elif message.group_id:
                     group_members = db.query(GroupMemberDB).filter(GroupMemberDB.group_id == message.group_id).all()
                     for member in group_members:
@@ -202,8 +215,10 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, db: Session = D
     finally:
         if user_id in active_connections:
             del active_connections[user_id]
+        for recipient_id in typing_users:
+            typing_users[recipient_id].discard(user_id)
 
-# API Endpoints (No Token Authentication)
+# API Endpoints
 @app.post("/register")
 async def register(user: User, db: Session = Depends(get_db)):
     try:
@@ -287,11 +302,16 @@ async def apply_for_job(application: JobApplication, db: Session = Depends(get_d
     user = db.query(UserDB).filter(UserDB.id == application.user_id).first()
     if not user or user.role != 0:
         raise HTTPException(status_code=403, detail="Not authorized")
+    if db.query(JobApplicationDB).filter_by(job_id=application.job_id, user_id=application.user_id).first():
+        raise HTTPException(status_code=400, detail="Already applied")
     last_app = db.query(JobApplicationDB).order_by(JobApplicationDB.id.desc()).first()
     app_id = (last_app.id + 1) if last_app else 1
     db_app = JobApplicationDB(id=app_id, job_id=application.job_id, user_id=application.user_id)
     db.add(db_app)
     db.commit()
+    employer = db.query(JobDB).filter(JobDB.id == application.job_id).first().user_id
+    if employer in active_connections:
+        await active_connections[employer].send_json({"type": "notification", "message": f"New application for job {application.job_id}"})
     return {"message": "Application submitted"}
 
 @app.post("/jobseeker/update_cv")
@@ -305,7 +325,7 @@ async def update_cv(user_id: int = Form(...), cv: UploadFile = File(...), db: Se
     os.makedirs("uploads", exist_ok=True)
     with open(cv_path, "wb") as f:
         f.write(await cv.read())
-    skills = "Python, JavaScript"  # Placeholder
+    skills = "Python, JavaScript"  # Placeholder for AI enhancement
     db_jobseeker = db.query(JobSeekerDB).filter(JobSeekerDB.user_id == user_id).first()
     if not db_jobseeker:
         db_jobseeker = JobSeekerDB(user_id=user_id, email=user.email, cv_path=cv_path, skills=skills)
@@ -322,7 +342,7 @@ async def create_group(user_id: int = Form(...), name: str = Form(...), members:
         raise HTTPException(status_code=400, detail="Invalid user_id")
     last_group = db.query(GroupDB).order_by(GroupDB.id.desc()).first()
     group_id = (last_group.id + 1) if last_group else 1
-    db_group = GroupDB(id=group_id, name=name)
+    db_group = GroupDB(id=group_id, name=name, created_by=user_id)
     db.add(db_group)
     db.commit()
     member_ids = [user_id] + [int(m) for m in members.split(",") if m]
@@ -354,9 +374,11 @@ async def jobseeker_dashboard(user_id: int, db: Session = Depends(get_db)):
     if not user or user.role != 0:
         raise HTTPException(status_code=403, detail="Not authorized")
     jobs = db.query(JobDB).filter(JobDB.status == "active").all()
+    applications = db.query(JobApplicationDB).filter(JobApplicationDB.user_id == user_id).all()
     return {
         "user_id": user_id,
-        "jobs": [{"id": j.id, "title": j.title, "description": j.description, "requirements": j.requirements, "deadline": j.deadline} for j in jobs]
+        "jobs": [{"id": j.id, "title": j.title, "description": j.description, "requirements": j.requirements, "deadline": j.deadline} for j in jobs],
+        "applications": [a.job_id for a in applications]
     }
 
 @app.get("/employer/dashboard")
@@ -378,24 +400,42 @@ async def employer_dashboard(user_id: int, db: Session = Depends(get_db)):
 async def get_chat_list(user_id: int, db: Session = Depends(get_db)):
     if user_id <= 0:
         raise HTTPException(status_code=400, detail="Invalid user_id")
+    user = db.query(UserDB).filter(UserDB.id == user_id).first()
     messages = db.query(MessageDB).filter((MessageDB.sender_id == user_id) | (MessageDB.recipient_id == user_id)).all()
     chat_dict = {}
     for msg in messages:
         other_id = msg.recipient_id if msg.sender_id == user_id else msg.sender_id
         if other_id and other_id not in chat_dict:
-            user = db.query(UserDB).filter(UserDB.id == other_id).first()
-            chat_dict[other_id] = {"user_id": other_id, "email": user.email, "last_message": msg.sent_at.isoformat(), "unread": 0}
+            other_user = db.query(UserDB).filter(UserDB.id == other_id).first()
+            if user.role == 0 and other_user.role == 1 and msg.sender_id != other_id:  # Job seeker only sees employer-initiated chats
+                continue
+            chat_dict[other_id] = {
+                "user_id": other_id,
+                "email": other_user.email,
+                "phone_number": other_user.phone_number,
+                "last_message": msg.sent_at.isoformat(),
+                "unread": 0 if msg.read_at else 1
+            }
     return list(chat_dict.values())
 
 @app.get("/messages/{recipient_id}")
 async def get_messages(recipient_id: int, user_id: int, db: Session = Depends(get_db)):
     if user_id <= 0:
         raise HTTPException(status_code=400, detail="Invalid user_id")
+    user = db.query(UserDB).filter(UserDB.id == user_id).first()
+    recipient = db.query(UserDB).filter(UserDB.id == recipient_id).first()
+    if user.role == 0 and recipient.role == 1:  # Job seeker checks employer initiation
+        first_msg = db.query(MessageDB).filter(
+            ((MessageDB.sender_id == user_id) & (MessageDB.recipient_id == recipient_id)) |
+            ((MessageDB.sender_id == recipient_id) & (MessageDB.recipient_id == user_id))
+        ).order_by(MessageDB.sent_at).first()
+        if first_msg and first_msg.sender_id != recipient_id:
+            raise HTTPException(status_code=403, detail="Employer must initiate chat")
     messages = db.query(MessageDB).filter(
         ((MessageDB.sender_id == user_id) & (MessageDB.recipient_id == recipient_id)) |
         ((MessageDB.sender_id == recipient_id) & (MessageDB.recipient_id == user_id))
     ).order_by(MessageDB.sent_at).all()
-    return [{"sender_id": m.sender_id, "recipient_id": m.recipient_id, "message_type": m.message_type, "content": m.content, "sent_at": m.sent_at.isoformat()} for m in messages]
+    return [{"sender_id": m.sender_id, "recipient_id": m.recipient_id, "message_type": m.message_type, "content": m.content, "sent_at": m.sent_at.isoformat(), "read_at": m.read_at.isoformat() if m.read_at else None} for m in messages]
 
 @app.get("/groups")
 async def get_groups(user_id: int, db: Session = Depends(get_db)):
@@ -408,8 +448,10 @@ async def get_groups(user_id: int, db: Session = Depends(get_db)):
 async def get_group_messages(group_id: int, user_id: int, db: Session = Depends(get_db)):
     if user_id <= 0:
         raise HTTPException(status_code=400, detail="Invalid user_id")
+    if not db.query(GroupMemberDB).filter_by(group_id=group_id, user_id=user_id).first():
+        raise HTTPException(status_code=403, detail="Not a group member")
     messages = db.query(MessageDB).filter(MessageDB.group_id == group_id).order_by(MessageDB.sent_at).all()
-    return [{"sender_id": m.sender_id, "group_id": m.group_id, "message_type": m.message_type, "content": m.content, "sent_at": m.sent_at.isoformat()} for m in messages]
+    return [{"sender_id": m.sender_id, "group_id": m.group_id, "message_type": m.message_type, "content": m.content, "sent_at": m.sent_at.isoformat(), "read_at": m.read_at.isoformat() if m.read_at else None} for m in messages]
 
 @app.get("/", response_class=HTMLResponse)
 async def login_page():

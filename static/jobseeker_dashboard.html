@@ -6,43 +6,105 @@
     <title>Job Seeker Dashboard - GaPP2</title>
     <script src="https://mozilla.github.io/pdf.js/build/pdf.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f0f4f8; }
-        .container { max-width: 1200px; margin: auto; display: grid; grid-template-columns: 1fr 2fr; gap: 20px; }
-        .sidebar { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-        .main { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-        h2, h3 { color: #333; }
-        button { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        :root {
+            --primary: #007bff;
+            --secondary: #f0f4f8;
+            --text: #333;
+            --bg: #fff;
+            --shadow: 0 4px 8px rgba(0,0,0,0.1);
+            --sent-bg: #dcf8c6;
+            --received-bg: #e9ecef;
+        }
+        [data-theme="dark"] {
+            --primary: #66b0ff;
+            --secondary: #2c3e50;
+            --text: #ecf0f1;
+            --bg: #34495e;
+            --sent-bg: #1abc9c;
+            --received-bg: #7f8c8d;
+        }
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: var(--secondary); color: var(--text); transition: all 0.3s; }
+        .container { max-width: 1200px; margin: auto; }
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+        .tab { padding: 10px 20px; background: var(--bg); border-radius: 5px 5px 0 0; cursor: pointer; transition: background 0.3s; }
+        .tab.active { background: var(--primary); color: white; }
+        .tab-content { display: none; background: var(--bg); padding: 20px; border-radius: 0 5px 5px 5px; box-shadow: var(--shadow); }
+        .tab-content.active { display: block; animation: fadeIn 0.5s; }
+        h2, h3 { color: var(--text); }
+        button { padding: 10px 20px; background: var(--primary); color: white; border: none; border-radius: 5px; cursor: pointer; transition: background 0.3s; }
         button:hover { background: #0056b3; }
-        .job-card, .chat-card { padding: 15px; margin-bottom: 10px; background: #f9f9f9; border-radius: 5px; }
-        .chat-area { height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; }
+        .job-card, .chat-card { padding: 15px; margin-bottom: 10px; background: var(--bg); border-radius: 5px; box-shadow: var(--shadow); transition: transform 0.2s; }
+        .job-card:hover { transform: scale(1.02); }
+        .chat-area { height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; background: var(--bg); }
+        .message { padding: 10px; margin: 5px 0; border-radius: 5px; max-width: 70%; }
+        .message.sent { background: var(--sent-bg); align-self: flex-end; }
+        .message.received { background: var(--received-bg); align-self: flex-start; }
         .message-input { display: flex; gap: 10px; }
         input[type="text"], input[type="file"] { padding: 10px; border: 1px solid #ddd; border-radius: 5px; flex-grow: 1; }
         video { width: 100%; max-width: 400px; border-radius: 5px; }
+        .notification { position: fixed; top: 20px; right: 20px; padding: 10px 20px; background: var(--primary); color: white; border-radius: 5px; box-shadow: var(--shadow); animation: slideIn 0.5s; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideIn { from { right: -100%; } to { right: 20px; } }
+        @media (max-width: 768px) {
+            .tabs { flex-direction: column; }
+            .container { padding: 10px; }
+            .job-card, .chat-card { padding: 10px; }
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="sidebar">
-            <h2>Job Seeker Dashboard</h2>
+        <div class="tabs">
+            <div class="tab active" onclick="showTab('profile')">Profile</div>
+            <div class="tab" onclick="showTab('jobs')">Job Matches</div>
+            <div class="tab" onclick="showTab('applications')">Applications</div>
+            <div class="tab" onclick="showTab('chats')">Chats</div>
+        </div>
+        <div id="profile" class="tab-content active">
+            <h2>Profile</h2>
+            <button onclick="toggleTheme()">Toggle Theme</button>
             <button onclick="logout()">Logout</button>
             <h3>Upload CV</h3>
             <input type="file" id="cvInput" accept=".pdf">
             <button onclick="uploadCV()">Upload & Enhance</button>
-            <h3>Chat List</h3>
-            <div id="chatList"></div>
-            <h3>Groups</h3>
-            <input type="text" id="groupName" placeholder="Group Name">
-            <input type="text" id="groupMembers" placeholder="User IDs (comma-separated)">
-            <button onclick="createGroup()">Create Group</button>
-            <div id="groupList"></div>
+            <h3>Feedback</h3>
+            <input type="text" id="feedback" placeholder="Your feedback...">
+            <button onclick="submitFeedback()">Submit</button>
         </div>
-        <div class="main">
+        <div id="jobs" class="tab-content">
             <h3>Matching Jobs</h3>
             <div id="jobList"></div>
-            <h3>Chat</h3>
-            <div id="messages" class="chat-area"></div>
+        </div>
+        <div id="applications" class="tab-content">
+            <h3>Your Applications</h3>
+            <div id="applicationList"></div>
+        </div>
+        <div id="chats" class="tab-content">
+            <div class="tabs">
+                <div class="tab active" onclick="showChatTab('employer')">Employer Chats</div>
+                <div class="tab" onclick="showChatTab('users')">User Chats</div>
+                <div class="tab" onclick="showChatTab('groups')">Group Chats</div>
+            </div>
+            <div id="employer" class="chat-tab-content active">
+                <h3>Employer Chats</h3>
+                <div id="employerChatList"></div>
+            </div>
+            <div id="users" class="chat-tab-content">
+                <h3>User Chats</h3>
+                <input type="text" id="userPhone" placeholder="Enter phone number">
+                <button onclick="startUserChat()">Start Chat</button>
+                <div id="userChatList"></div>
+            </div>
+            <div id="groups" class="chat-tab-content">
+                <h3>Group Chats</h3>
+                <input type="text" id="groupName" placeholder="Group Name">
+                <input type="text" id="groupMembers" placeholder="User IDs (comma-separated)">
+                <button onclick="createGroup()">Create Group</button>
+                <div id="groupList"></div>
+            </div>
+            <div class="chat-area" id="messages"></div>
             <div class="message-input">
-                <input type="text" id="messageInput" placeholder="Type a message">
+                <input type="text" id="messageInput" placeholder="Type a message" oninput="showTyping()">
                 <input type="file" id="mediaInput" accept="image/*,audio/*,video/*">
                 <button onclick="sendMessage('text')">Send Text</button>
                 <button onclick="sendMessage('media')">Send Media</button>
@@ -53,97 +115,144 @@
             <button onclick="startVideoCall()">Start Call</button>
         </div>
     </div>
+    <div id="notifications"></div>
 
     <script>
         const userId = parseInt(localStorage.getItem('userId'));
         const role = parseInt(localStorage.getItem('role'));
-        let socket, peer, localStream, cvSkills = [];
+        let socket, peer, localStream, cvSkills = [], appliedJobs = new Set();
+
+        function showTab(tabId) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelector(`.tab[onclick="showTab('${tabId}')"]`).classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+            if (tabId === 'jobs') loadJobs();
+            if (tabId === 'applications') loadApplications();
+        }
+
+        function showChatTab(tabId) {
+            document.querySelectorAll('#chats .tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.chat-tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelector(`#chats .tab[onclick="showChatTab('${tabId}')"]`).classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+            if (tabId === 'employer') loadChatList('employer');
+            if (tabId === 'users') loadChatList('users');
+            if (tabId === 'groups') loadGroups();
+        }
 
         async function loadDashboard() {
             if (!userId || role !== 0) {
                 window.location.href = '/';
                 return;
             }
-            try {
-                const aiJobsResp = await fetch('/jobs/ai_fetched');
-                if (!aiJobsResp.ok) throw new Error('Failed to fetch AI jobs');
-                const aiJobs = await aiJobsResp.json();
-
-                const employerJobsResp = await fetch(`/jobseeker/dashboard?user_id=${userId}`);
-                if (!employerJobsResp.ok) throw new Error((await employerJobsResp.json()).detail);
-                const employerJobs = (await employerJobsResp.json()).jobs;
-
-                const allJobs = [...employerJobs, ...aiJobs];
-                document.getElementById('jobList').innerHTML = allJobs
-                    .filter(job => cvSkills.some(skill => job.requirements.includes(skill)) || true)
-                    .map(job => `
-                        <div class="job-card">
-                            <h4>${job.title}</h4>
-                            <p>${job.description}</p>
-                            <button onclick="applyForJob(${job.id || job._id})">Apply</button>
-                        </div>
-                    `).join('');
-
-                socket = new WebSocket(`wss://${window.location.host}/ws/${userId}`);
-                socket.onmessage = (event) => {
-                    const msg = JSON.parse(event.data);
-                    if (msg.type === 'webrtc_signal') handleSignal(msg);
-                    else appendMessage(msg);
-                };
-
-                loadChatList();
-                loadGroups();
-            } catch (error) {
-                console.error('Dashboard load error:', error.message);
-                alert('Error: ' + error.message);
-            }
+            socket = new WebSocket(`wss://${window.location.host}/ws/${userId}`);
+            socket.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'webrtc_signal') handleSignal(msg);
+                else if (msg.type === 'notification') notify(msg.message);
+                else if (msg.type === 'typing') document.getElementById('messages').innerHTML += `<p id="typing-${msg.from}">${msg.from} is typing...</p>`;
+                else if (msg.type === 'stop_typing') document.getElementById(`typing-${msg.from}`)?.remove();
+                else {
+                    appendMessage(msg);
+                    notify(`New message from ${msg.sender_id}`);
+                }
+            };
+            loadJobs();
+            loadApplications();
+            loadChatList('employer');
         }
 
-        async function loadChatList() {
+        async function loadJobs() {
+            const aiJobsResp = await fetch('/jobs/ai_fetched');
+            const aiJobs = await aiJobsResp.json();
+            const employerJobsResp = await fetch(`/jobseeker/dashboard?user_id=${userId}`);
+            const employerJobs = (await employerJobsResp.json()).jobs;
+            const externalJobs = await fetchExternalJobs();
+            const allJobs = [...employerJobs, ...aiJobs, ...externalJobs];
+            document.getElementById('jobList').innerHTML = allJobs
+                .filter(job => cvSkills.some(skill => job.requirements.includes(skill)) || true)
+                .map(job => `
+                    <div class="job-card">
+                        <h4>${job.title}</h4>
+                        <p>${job.description}</p>
+                        <button ${appliedJobs.has(job.id) ? 'disabled' : ''} onclick="applyForJob(${job.id || job._id})">
+                            ${appliedJobs.has(job.id) ? 'Applied' : 'Apply'}
+                        </button>
+                    </div>
+                `).join('');
+        }
+
+        async function fetchExternalJobs() {
+            return [
+                { id: 1001, title: "Frontend Dev (LinkedIn)", description: "Remote role", requirements: "JavaScript, React" },
+                { id: 1002, title: "Data Analyst (Google)", description: "Full-time", requirements: "SQL, Python" }
+            ];
+        }
+
+        async function loadApplications() {
+            const resp = await fetch(`/jobseeker/dashboard?user_id=${userId}`);
+            const data = await resp.json();
+            appliedJobs = new Set(data.applications);
+            const jobs = data.jobs.filter(j => appliedJobs.has(j.id));
+            document.getElementById('applicationList').innerHTML = jobs.map(job => `
+                <div class="job-card">
+                    <h4>${job.title}</h4>
+                    <p>${job.description}</p>
+                    <p>Status: Applied</p>
+                </div>
+            `).join('');
+        }
+
+        async function loadChatList(type) {
             const resp = await fetch(`/chat_list?user_id=${userId}`);
-            if (!resp.ok) throw new Error('Failed to fetch chat list');
             const chats = await resp.json();
-            document.getElementById('chatList').innerHTML = chats.map(chat => `
-                <div class="chat-card" onclick="loadMessages(${chat.user_id})">${chat.email} (${chat.unread})</div>
+            const listId = type === 'employer' ? 'employerChatList' : 'userChatList';
+            document.getElementById(listId).innerHTML = chats.map(chat => `
+                <div class="chat-card" onclick="loadMessages(${chat.user_id}, '${type}')">${chat.email} ${chat.unread ? '(Unread)' : ''}</div>
             `).join('');
         }
 
         async function loadGroups() {
             const resp = await fetch(`/groups?user_id=${userId}`);
-            if (!resp.ok) throw new Error('Failed to fetch groups');
             const groups = await resp.json();
             document.getElementById('groupList').innerHTML = groups.map(group => `
                 <div class="chat-card" onclick="loadGroupMessages(${group.id})">${group.name}</div>
             `).join('');
         }
 
-        async function loadMessages(recipientId) {
+        async function loadMessages(recipientId, type) {
             localStorage.setItem('chatTarget', recipientId);
+            localStorage.setItem('chatType', type);
             const resp = await fetch(`/messages/${recipientId}?user_id=${userId}`);
-            if (!resp.ok) throw new Error('Failed to fetch messages');
             const messages = await resp.json();
             document.getElementById('messages').innerHTML = messages.map(m => renderMessage(m)).join('');
         }
 
         async function loadGroupMessages(groupId) {
             localStorage.setItem('chatTarget', `group_${groupId}`);
+            localStorage.setItem('chatType', 'groups');
             const resp = await fetch(`/messages/group/${groupId}?user_id=${userId}`);
-            if (!resp.ok) throw new Error('Failed to fetch group messages');
             const messages = await resp.json();
             document.getElementById('messages').innerHTML = messages.map(m => renderMessage(m)).join('');
         }
 
         function renderMessage(msg) {
-            if (msg.message_type === 'text') return `<p>${msg.sender_id === userId ? 'You' : 'Them'}: ${msg.content}</p>`;
-            if (msg.message_type === 'image') return `<p><img src="${msg.content}" style="max-width: 200px;"></p>`;
-            if (msg.message_type === 'audio') return `<p><audio controls src="${msg.content}"></audio></p>`;
-            if (msg.message_type === 'video') return `<p><video controls src="${msg.content}" style="max-width: 200px;"></video></p>`;
-            return `<p>${msg.sender_id === userId ? 'You' : 'Them'}: [Unsupported format]</p>`;
+            const isSent = msg.sender_id === userId;
+            return `
+                <div class="message ${isSent ? 'sent' : 'received'}">
+                    ${msg.message_type === 'text' ? msg.content :
+                      msg.message_type === 'image' ? `<img src="${msg.content}" style="max-width: 200px;">` :
+                      msg.message_type === 'audio' ? `<audio controls src="${msg.content}"></audio>` :
+                      msg.message_type === 'video' ? `<video controls src="${msg.content}" style="max-width: 200px;"></video>` : '[Unsupported format]'}
+                    <small>${isSent && msg.read_at ? '✔✔' : isSent ? '✔' : ''}</small>
+                </div>`;
         }
 
         async function sendMessage(type) {
             const target = localStorage.getItem('chatTarget');
-            if (!target) return alert('Select a chat first');
+            const chatType = localStorage.getItem('chatType');
+            if (!target) return notify('Select a chat first');
             const msg = {
                 recipient_id: target.startsWith('group_') ? null : parseInt(target),
                 group_id: target.startsWith('group_') ? parseInt(target.split('_')[1]) : null,
@@ -172,17 +281,13 @@
 
         async function uploadCV() {
             const file = document.getElementById('cvInput').files[0];
-            if (!file) return alert('Select a CV file');
+            if (!file) return notify('Select a CV file');
             const formData = new FormData();
             formData.append('user_id', userId);
             formData.append('cv', file);
-            const resp = await fetch('/jobseeker/update_cv', {
-                method: 'POST',
-                body: formData
-            });
-            if (!resp.ok) throw new Error('Failed to upload CV');
+            const resp = await fetch('/jobseeker/update_cv', { method: 'POST', body: formData });
             const data = await resp.json();
-            alert(data.message);
+            notify(data.message);
 
             const reader = new FileReader();
             reader.onload = async () => {
@@ -194,20 +299,23 @@
                     text += content.items.map(item => item.str).join(' ');
                 }
                 cvSkills = text.match(/Python|JavaScript|Java|C\+\+|SQL|HTML|CSS/gi) || ['Python'];
-                console.log('Extracted skills:', cvSkills);
-                loadDashboard();
+                loadJobs();
             };
             reader.readAsArrayBuffer(file);
         }
 
         async function applyForJob(jobId) {
+            if (appliedJobs.has(jobId)) return notify('Already applied');
             const resp = await fetch('/jobseeker/apply', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ job_id: jobId, user_id: userId })
             });
-            if (!resp.ok) throw new Error('Failed to apply');
-            alert((await resp.json()).message);
+            const data = await resp.json();
+            appliedJobs.add(jobId);
+            loadJobs();
+            loadApplications();
+            notify(data.message);
         }
 
         async function createGroup() {
@@ -218,23 +326,29 @@
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: new URLSearchParams({ user_id: userId, name, members })
             });
-            if (!resp.ok) throw new Error('Failed to create group');
-            alert('Group created');
+            notify('Group created');
             loadGroups();
+        }
+
+        async function startUserChat() {
+            const phone = document.getElementById('userPhone').value;
+            const resp = await fetch(`/chat_list?user_id=${userId}`);
+            const users = await resp.json();
+            const target = users.find(u => u.phone_number === phone);
+            if (target) loadMessages(target.user_id, 'users');
+            else notify('User not found');
         }
 
         async function startVideoCall() {
             const target = localStorage.getItem('chatTarget');
-            if (!target || target.startsWith('group_')) return alert('Select a 1:1 chat');
+            if (!target || target.startsWith('group_')) return notify('Select a 1:1 chat');
             localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
             document.getElementById('localVideo').srcObject = localStream;
             peer = new RTCPeerConnection();
             localStream.getTracks().forEach(track => peer.addTrack(track, localStream));
             peer.ontrack = (event) => document.getElementById('remoteVideo').srcObject = event.streams[0];
             peer.onicecandidate = (event) => {
-                if (event.candidate) {
-                    socket.send(JSON.stringify({ type: 'webrtc_signal', signal: event.candidate, to: target, room: `${userId}-${target}` }));
-                }
+                if (event.candidate) socket.send(JSON.stringify({ type: 'webrtc_signal', signal: event.candidate, to: target, room: `${userId}-${target}` }));
             };
             const offer = await peer.createOffer();
             await peer.setLocalDescription(offer);
@@ -249,9 +363,7 @@
                 localStream.getTracks().forEach(track => peer.addTrack(track, localStream));
                 peer.ontrack = (event) => document.getElementById('remoteVideo').srcObject = event.streams[0];
                 peer.onicecandidate = (event) => {
-                    if (event.candidate) {
-                        socket.send(JSON.stringify({ type: 'webrtc_signal', signal: event.candidate, to: msg.sender_id, room: msg.room }));
-                    }
+                    if (event.candidate) socket.send(JSON.stringify({ type: 'webrtc_signal', signal: event.candidate, to: msg.sender_id, room: msg.room }));
                 };
             }
             if (msg.signal.type === 'offer') {
@@ -264,6 +376,28 @@
             } else {
                 await peer.addIceCandidate(new RTCIceCandidate(msg.signal));
             }
+        }
+
+        function showTyping() {
+            const target = localStorage.getItem('chatTarget');
+            if (target && !target.startsWith('group_')) socket.send(JSON.stringify({ type: 'typing', to: target }));
+        }
+
+        function notify(message) {
+            const div = document.createElement('div');
+            div.className = 'notification';
+            div.textContent = message;
+            document.getElementById('notifications').appendChild(div);
+            setTimeout(() => div.remove(), 3000);
+        }
+
+        async function submitFeedback() {
+            const feedback = document.getElementById('feedback').value;
+            notify('Feedback submitted: ' + feedback);
+        }
+
+        function toggleTheme() {
+            document.body.dataset.theme = document.body.dataset.theme === 'dark' ? 'light' : 'dark';
         }
 
         function logout() {
