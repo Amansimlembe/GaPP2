@@ -1,4 +1,8 @@
 .env
 uploads/
 __pycache__/
-*.pyc
+*.pyc.env
+__pycache__/
+.env
+__pycache__/
+.env
