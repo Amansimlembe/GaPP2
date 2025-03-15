@@ -58,7 +58,6 @@ class UserDB(Base):
     last_seen = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.now(datetime.timezone.utc))
 
-# Other models remain unchanged (JobDB, MessageDB, etc.)
 class JobDB(Base):
     __tablename__ = "jobs"
     id = Column(Integer, primary_key=True, index=True)
