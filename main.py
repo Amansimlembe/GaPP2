@@ -18,7 +18,6 @@ import uvicorn
 from dotenv import load_dotenv
 from PyPDF2 import PdfReader
 from io import BytesIO
-from PyPDF2 import PdfReader  # This line caused the error
 
 load_dotenv()
 
@@ -130,6 +129,7 @@ class ApplicationDB(Base):
 # Update database schema on startup
 try:
     with engine.connect() as connection:
+        # Update users table
         connection.execute(text("""
             ALTER TABLE users
             ADD COLUMN IF NOT EXISTS profile_pic VARCHAR DEFAULT '/static/default_profile.jpg',
@@ -138,6 +138,13 @@ try:
             ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
             ADD COLUMN IF NOT EXISTS cv TEXT;
         """))
+        # Update messages table to add missing columns
+        connection.execute(text("""
+            ALTER TABLE messages
+            ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP WITH TIME ZONE,
+            ADD COLUMN IF NOT EXISTS read_at TIMESTAMP WITH TIME ZONE;
+        """))
+        # Ensure applications table exists
         connection.execute(text("""
             CREATE TABLE IF NOT EXISTS applications (
                 id SERIAL PRIMARY KEY,
@@ -414,7 +421,6 @@ async def get_user(user_id: int, user_id_auth: str = Query(..., regex=r"^\d+:\d+
         raise HTTPException(status_code=404, detail="User not found")
     return {"user_id": user.id, "name": user.email.split("@")[0], "profile_pic": user.profile_pic, "last_seen": user.last_seen.isoformat() if user.last_seen else None, "cv": user.cv}
 
-
 @app.post("/jobseeker/update_cv")
 async def update_cv(user_id: str = Form(...), cv_file: UploadFile = File(...), db: Session = Depends(get_db)):
     uid, _ = map(int, user_id.split(":"))
@@ -460,7 +466,6 @@ async def post_job(job: Job, user_id: str = Form(...), db: Session = Depends(get
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
     content = await file.read()
-    # Mock upload to cloud storage; return base64 for now
     file_base64 = base64.b64encode(content).decode("utf-8")
     url = f"data:{file.content_type};base64,{file_base64}"
     return {"url": url}
