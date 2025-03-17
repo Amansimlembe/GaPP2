@@ -18,6 +18,7 @@ import uvicorn
 from dotenv import load_dotenv
 from PyPDF2 import PdfReader
 from io import BytesIO
+from PyPDF2 import PdfReader  # This line caused the error
 
 load_dotenv()
 
@@ -412,6 +413,7 @@ async def get_user(user_id: int, user_id_auth: str = Query(..., regex=r"^\d+:\d+
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return {"user_id": user.id, "name": user.email.split("@")[0], "profile_pic": user.profile_pic, "last_seen": user.last_seen.isoformat() if user.last_seen else None, "cv": user.cv}
+
 
 @app.post("/jobseeker/update_cv")
 async def update_cv(user_id: str = Form(...), cv_file: UploadFile = File(...), db: Session = Depends(get_db)):
