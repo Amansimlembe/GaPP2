@@ -4,244 +4,278 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Job Seeker Dashboard - GaPP2</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
-        body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; background: #f5f5f5; display: flex; height: 100vh; }
-        .sidebar { width: 250px; background: #075e54; color: white; padding: 20px; }
-        .sidebar .tab { padding: 15px; cursor: pointer; }
-        .sidebar .tab:hover, .sidebar .tab.active { background: #128c7e; }
+        body { font-family: Arial, sans-serif; margin: 0; background: #f4f7fa; color: #333; }
+        .container { display: flex; height: 100vh; }
+        .sidebar { background: #2c3e50; color: white; padding: 20px; box-shadow: 2px 0 5px rgba(0,0,0,0.1); transition: width 0.3s; }
+        .sidebar h2 { margin: 0 0 20px; font-size: 24px; }
+        .nav-tabs { list-style: none; padding: 0; margin: 0; }
+        .nav-tabs li { padding: 10px; margin: 5px 0; background: #3498db; border-radius: 5px; cursor: pointer; transition: background 0.3s; }
+        .nav-tabs li:hover { background: #2980b9; }
+        .menu-icon { display: none; font-size: 24px; cursor: pointer; }
         .content { flex-grow: 1; padding: 20px; overflow-y: auto; }
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
-        .whatsapp-container { height: 100%; display: flex; }
-        .chat-list { width: 350px; background: #fff; border-right: 1px solid #e5e5e5; overflow-y: auto; }
-        .chat-card { padding: 15px; border-bottom: 1px solid #e5e5e5; display: flex; align-items: center; cursor: pointer; }
-        .chat-card:hover { background: #f0f0f0; }
-        .profile-pic { width: 50px; height: 50px; border-radius: 50%; margin-right: 10px; }
-        .chat-preview { flex-grow: 1; }
-        .chat-area { flex-grow: 1; display: flex; flex-direction: column; background: #ece5dd; }
-        .chat-header { padding: 10px; background: #075e54; color: white; display: flex; align-items: center; }
-        .chat-header img { width: 40px; height: 40px; border-radius: 50%; margin-right: 10px; }
-        .chat-body { flex-grow: 1; padding: 20px; overflow-y: auto; }
-        .message { max-width: 60%; margin: 10px; padding: 10px; border-radius: 8px; position: relative; }
+        .tab { display: none; }
+        .tab.active { display: block; animation: fadeIn 0.5s; }
+        .job-list, .chat-list, .status-list, .call-list { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .job, .chat-item, .status-item, .call-item { padding: 15px; border-bottom: 1px solid #eee; }
+        .job button, .chat-item button { padding: 8px 15px; background: #27ae60; color: white; border: none; border-radius: 5px; cursor: pointer; transition: background 0.3s; }
+        .job button:hover, .chat-item button:hover { background: #219653; }
+        .chat-box { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); height: 500px; display: flex; flex-direction: column; }
+        .messages { flex-grow: 1; overflow-y: auto; margin-bottom: 20px; }
+        .message { padding: 10px; margin: 5px 0; border-radius: 5px; max-width: 70%; position: relative; }
         .message.sent { background: #dcf8c6; align-self: flex-end; }
-        .message.received { background: #fff; align-self: flex-start; }
-        .message small { font-size: 10px; color: #666; position: absolute; bottom: -15px; right: 5px; }
-        .message-input { padding: 10px; background: #fff; display: flex; align-items: center; }
-        .message-input input[type="text"] { flex-grow: 1; padding: 10px; border: none; border-radius: 20px; margin-right: 10px; }
-        .message-input button { background: #075e54; color: white; border: none; padding: 10px; border-radius: 50%; cursor: pointer; }
-        .attach-btn { background: none; border: none; font-size: 20px; cursor: pointer; margin-right: 10px; }
-        .subtabs { position: fixed; bottom: 0; width: 100%; background: #fff; display: flex; justify-content: space-around; padding: 10px 0; border-top: 1px solid #e5e5e5; }
-        .subtab { cursor: pointer; padding: 10px; }
-        .subtab.active { color: #075e54; }
+        .message.received { background: #ecf0f1; align-self: flex-start; }
+        .message img, .message video, .message audio { max-width: 100%; border-radius: 5px; }
+        .input-area { display: flex; align-items: center; background: #f1f1f1; padding: 10px; border-radius: 25px; }
+        .input-area input[type="text"] { flex-grow: 1; padding: 10px; border: none; background: transparent; outline: none; }
+        .input-area input[type="file"] { display: none; }
+        .input-area label { margin: 0 10px; cursor: pointer; font-size: 20px; color: #555; }
+        .input-area button { background: transparent; border: none; cursor: pointer; font-size: 20px; color: #075e54; }
+        .preview { margin: 10px 0; padding: 10px; background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .preview img, .preview video, .preview audio { max-width: 200px; border-radius: 5px; }
+        .sub-tabs { display: flex; justify-content: space-around; background: #ecf0f1; padding: 10px; border-radius: 5px; margin-top: 10px; }
+        .sub-tab { padding: 10px; cursor: pointer; border-radius: 5px; transition: background 0.3s; }
+        .sub-tab.active { background: #3498db; color: white; }
+        @media (min-width: 769px) {
+            .sidebar { width: 250px; }
+            .nav-tabs { display: flex; flex-direction: column; }
+        }
+        @media (max-width: 768px) {
+            .sidebar { width: 0; overflow: hidden; position: fixed; height: 100%; z-index: 1000; }
+            .sidebar.open { width: 200px; }
+            .menu-icon { display: block; position: fixed; top: 20px; left: 20px; z-index: 1001; }
+            .content { padding: 60px 20px 20px; }
+        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     </style>
 </head>
 <body>
-    <div class="sidebar">
-        <div class="tab" onclick="showTab('dashboard')">Dashboard</div>
-        <div class="tab" onclick="showTab('jobs')">Jobs</div>
-        <div class="tab active" onclick="showTab('gchat')">G.Chat</div>
-        <div class="tab" onclick="showTab('profile')">Profile</div>
-        <div class="tab" onclick="logout()">Logout</div>
-    </div>
-    <div class="content">
-        <div id="dashboard" class="tab-content">
+    <div class="container">
+        <div class="sidebar" id="sidebar">
             <h2>Job Seeker Dashboard</h2>
-            <div id="jobList"></div>
+            <ul class="nav-tabs">
+                <li onclick="showTab('jobs')">Jobs</li>
+                <li onclick="showTab('chat')">G.Chat</li>
+                <li onclick="showTab('interview')">Interview</li>
+                <li onclick="showTab('cv')">CV Enhancer</li>
+            </ul>
         </div>
-        <div id="jobs" class="tab-content">
-            <h2>Available Jobs</h2>
-            <div id="availableJobs"></div>
-        </div>
-        <div id="gchat" class="tab-content active">
-            <div class="whatsapp-container">
+        <i class="fas fa-bars menu-icon" onclick="toggleSidebar()"></i>
+        <div class="content">
+            <div id="jobs" class="tab active">
+                <h3>Available Jobs</h3>
+                <div class="job-list" id="jobList"></div>
+            </div>
+            <div id="chat" class="tab">
+                <h3>G.Chat</h3>
                 <div class="chat-list" id="chatList"></div>
-                <div class="chat-area" id="chatArea">
-                    <div class="chat-header" id="chatHeader"></div>
-                    <div class="chat-body" id="messages"></div>
-                    <div class="message-input">
-                        <button class="attach-btn" onclick="document.getElementById('mediaInput').click()">📎</button>
-                        <input type="file" id="mediaInput" accept="image/*,audio/*,video/*" style="display: none;">
-                        <input type="text" id="messageInput" placeholder="Type a message" oninput="showTyping()">
-                        <button onclick="sendMessage()">➤</button>
+                <div class="chat-box" id="chatBox" style="display: none;">
+                    <div class="messages" id="messages"></div>
+                    <div class="sub-tabs">
+                        <div class="sub-tab active" onclick="showSubTab('chat-tab')">Chat</div>
+                        <div class="sub-tab" onclick="showSubTab('status-tab')">Status</div>
+                        <div class="sub-tab" onclick="showSubTab('call-tab')">Calls</div>
                     </div>
+                    <div class="input-area">
+                        <label for="imageInput"><i class="fas fa-image"></i></label>
+                        <input type="file" id="imageInput" accept="image/*" onchange="previewFile('image')">
+                        <label for="videoInput"><i class="fas fa-video"></i></label>
+                        <input type="file" id="videoInput" accept="video/*" onchange="previewFile('video')">
+                        <label for="audioInput"><i class="fas fa-microphone"></i></label>
+                        <input type="file" id="audioInput" accept="audio/*" onchange="previewFile('audio')">
+                        <input type="text" id="messageInput" placeholder="Type a message...">
+                        <button onclick="sendMessage()"><i class="fas fa-paper-plane"></i></button>
+                    </div>
+                    <div id="preview" class="preview" style="display: none;"></div>
                 </div>
             </div>
-            <div class="subtabs">
-                <div class="subtab active" onclick="showSubTab('chats')">Chats</div>
-                <div class="subtab" onclick="showSubTab('calls')">Calls</div>
-                <div class="subtab" onclick="showSubTab('status')">Status</div>
-                <div class="subtab" onclick="showSubTab('settings')">Settings</div>
+            <div id="interview" class="tab">
+                <h3>Instant Video Interview</h3>
+                <video id="localVideo" autoplay muted></video>
+                <video id="remoteVideo" autoplay></video>
+                <button onclick="startInterview()">Start Interview</button>
             </div>
-        </div>
-        <div id="profile" class="tab-content">
-            <h2>Profile</h2>
-            <form id="cvForm">
-                <input type="file" id="cv" accept=".pdf">
-                <button type="submit">Upload CV</button>
-            </form>
+            <div id="cv" class="tab">
+                <h3>CV Enhancer</h3>
+                <input type="file" id="cvFile" accept=".pdf">
+                <button onclick="enhanceCV()">Enhance CV</button>
+                <a id="downloadCV" style="display: none;">Download Enhanced CV</a>
+            </div>
         </div>
     </div>
 
     <script>
-        const userIdRole = localStorage.getItem('userIdRole');
-        if (!userIdRole) window.location.href = '/';
+        const userIdRole = new URLSearchParams(window.location.search).get('user_id');
         const [userId, role] = userIdRole.split(':').map(Number);
-        let socket;
+        let selectedChatUserId = null;
+        let socket = null;
+        let fileToSend = null;
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.classList.toggle('open');
+        }
 
         function showTab(tabId) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-            document.querySelector(`.tab[onclick="showTab('${tabId}')"]`).classList.add('active');
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
             document.getElementById(tabId).classList.add('active');
-            if (tabId === 'dashboard') loadDashboard();
+            if (tabId === 'chat') loadChats();
             if (tabId === 'jobs') loadJobs();
-            if (tabId === 'gchat') loadChats();
+            if (window.innerWidth <= 768) toggleSidebar();
         }
 
         function showSubTab(tabId) {
-            document.querySelectorAll('.subtab').forEach(t => t.classList.remove('active'));
-            document.querySelector(`.subtab[onclick="showSubTab('${tabId}')"]`).classList.add('active');
-            if (tabId === 'chats') loadChats();
-            if (tabId === 'calls') loadCalls();
-            if (tabId === 'status') loadStatus();
-            if (tabId === 'settings') loadSettings();
-        }
-
-        async function loadDashboard() {
-            const resp = await fetch(`/jobseeker/dashboard?user_id=${userIdRole}`);
-            if (!resp.ok) throw new Error('Failed to load dashboard');
-            const data = await resp.json();
-            document.getElementById('jobList').innerHTML = data.jobs.map(job => `
-                <div><h3>${job.title}</h3><p>${job.description}</p></div>
-            `).join('');
+            document.querySelectorAll('.sub-tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelector(`.sub-tab[onclick="showSubTab('${tabId}')"]`).classList.add('active');
+            if (tabId === 'chat-tab') document.getElementById('chatBox').style.display = 'block';
         }
 
         async function loadJobs() {
-            const resp = await fetch(`/jobseeker/dashboard?user_id=${userIdRole}`);
-            if (!resp.ok) throw new Error('Failed to load jobs');
-            const data = await resp.json();
-            document.getElementById('availableJobs').innerHTML = data.jobs.map(job => `
-                <div><h3>${job.title}</h3><p>${job.description}</p><button onclick="apply(${job.id})">Apply</button></div>
+            const response = await fetch(`/jobseeker/dashboard?user_id=${userIdRole}`);
+            const data = await response.json();
+            const jobList = document.getElementById('jobList');
+            jobList.innerHTML = data.jobs.map(job => `
+                <div class="job">
+                    <h4>${job.title} (Match: ${job.match_score}%)</h4>
+                    <p>${job.description}</p>
+                    <button onclick="apply(${job.id})">Apply</button>
+                </div>
             `).join('');
         }
 
         async function loadChats() {
-            socket = new WebSocket(`wss://${window.location.host}/ws/${userId}`);
-            socket.onmessage = handleMessage;
-            const resp = await fetch(`/chat_list?user_id=${userIdRole}`);
-            if (!resp.ok) throw new Error('Failed to load chats');
-            const chats = await resp.json();
-            document.getElementById('chatList').innerHTML = chats.map(chat => `
-                <div class="chat-card" onclick="loadMessages(${chat.user_id})">
-                    <img src="${chat.profile_pic}" class="profile-pic">
-                    <div class="chat-preview">
-                        <strong>${chat.name}</strong>
-                        <p>${chat.last_message}</p>
-                        <small>${new Date(chat.last_time).toLocaleTimeString()}</small>
+            try {
+                const response = await fetch(`/chat_list?user_id=${userIdRole}`);
+                if (!response.ok) throw new Error('Failed to load chats');
+                const chats = await response.json();
+                const chatList = document.getElementById('chatList');
+                chatList.innerHTML = chats.map(chat => `
+                    <div class="chat-item">
+                        <p>${chat.name}: ${chat.last_message}</p>
+                        <button onclick="openChat(${chat.user_id})">Chat</button>
                     </div>
-                </div>
-            `).join('');
-        }
-
-        async function loadMessages(recipientId) {
-            localStorage.setItem('chatTarget', recipientId);
-            const resp = await fetch(`/messages/${recipientId}?user_id=${userIdRole}`);
-            if (!resp.ok) throw new Error('Failed to load messages');
-            const messages = await resp.json();
-            const recipient = await fetchUser(recipientId);
-            document.getElementById('chatHeader').innerHTML = `
-                <img src="${recipient.profile_pic}">
-                <div>
-                    <strong>${recipient.name}</strong>
-                    <small>Last seen: ${recipient.last_seen ? new Date(recipient.last_seen).toLocaleString() : 'Offline'}</small>
-                </div>
-                <button onclick="startCall('voice')">📞</button>
-                <button onclick="startCall('video')">📹</button>
-            `;
-            document.getElementById('messages').innerHTML = messages.map(m => `
-                <div class="message ${m.sender_id === userId ? 'sent' : 'received'}">
-                    ${m.message_type === 'text' ? m.content :
-                      m.message_type === 'image' ? `<img src="${m.content}" style="max-width: 200px;">` :
-                      m.message_type === 'audio' ? `<audio controls src="${m.content}"></audio>` :
-                      m.message_type === 'video' ? `<video controls src="${m.content}" style="max-width: 200px;"></video>` : '[File]'}
-                    <small>${new Date(m.sent_at).toLocaleTimeString()} ${m.read_at ? '✔✔' : m.delivered_at ? '✔' : ''}</small>
-                </div>
-            `).join('');
-        }
-
-        async function fetchUser(userId) {
-            const resp = await fetch(`/user/${userId}?user_id=${userIdRole}`);
-            if (!resp.ok) throw new Error('Failed to fetch user');
-            return await resp.json();
-        }
-
-        function handleMessage(event) {
-            const msg = JSON.parse(event.data);
-            if (msg.type === 'typing') document.getElementById('messages').innerHTML += `<p id="typing-${msg.from}">Typing...</p>`;
-            else if (msg.type === 'stop_typing') document.getElementById(`typing-${msg.from}`)?.remove();
-            else appendMessage(msg);
-        }
-
-        function appendMessage(msg) {
-            if (msg.recipient_id === userId || msg.sender_id === userId) {
-                document.getElementById('messages').innerHTML += `
-                    <div class="message ${msg.sender_id === userId ? 'sent' : 'received'}">
-                        ${msg.message_type === 'text' ? msg.content : `<${msg.message_type} src="${msg.content}" controls>`}
-                        <small>${new Date(msg.sent_at).toLocaleTimeString()} ${msg.read_at ? '✔✔' : msg.delivered_at ? '✔' : ''}</small>
-                    </div>`;
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load chats:', error);
+                alert('Failed to load chats');
             }
+        }
+
+        async function openChat(recipientId) {
+            selectedChatUserId = recipientId;
+            document.getElementById('chatBox').style.display = 'block';
+            const response = await fetch(`/messages/${recipientId}?user_id=${userIdRole}`);
+            const messages = await response.json();
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.innerHTML = messages.map(msg => `
+                <div class="message ${msg.sender_id === userId ? 'sent' : 'received'}">
+                    ${msg.message_type === 'text' ? msg.content : `<${msg.message_type} src="${msg.content}" controls></${msg.message_type}>`}
+                </div>
+            `).join('');
+            if (!socket) connectWebSocket();
+        }
+
+        function connectWebSocket() {
+            socket = new WebSocket(`wss://gapp2-znqj.onrender.com/ws/${userId}`);
+            socket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.recipient_id === userId && data.sender_id === selectedChatUserId) {
+                    document.getElementById('messages').innerHTML += `
+                        <div class="message received">${data.message_type === 'text' ? data.content : `<${data.message_type} src="${data.content}" controls></${data.message_type}>`}</div>`;
+                }
+                if (data.type === 'webrtc_signal') handleWebRTC(data);
+            };
+        }
+
+        function previewFile(type) {
+            const fileInput = document.getElementById(`${type}Input`);
+            const file = fileInput.files[0];
+            if (!file) return;
+            fileToSend = { file, type };
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const preview = document.getElementById('preview');
+                preview.style.display = 'block';
+                preview.innerHTML = `<${type} src="${e.target.result}" controls></${type}>`;
+            };
+            reader.readAsDataURL(file);
         }
 
         async function sendMessage() {
-            const target = localStorage.getItem('chatTarget');
             const input = document.getElementById('messageInput');
-            const file = document.getElementById('mediaInput').files[0];
-            const msg = { recipient_id: parseInt(target) };
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = () => {
-                    msg.message_type = file.type.split('/')[0];
-                    msg.content = reader.result;
-                    socket.send(JSON.stringify(msg));
-                    document.getElementById('mediaInput').value = '';
-                };
-                reader.readAsDataURL(file);
-            } else if (input.value) {
-                msg.message_type = 'text';
-                msg.content = input.value;
-                socket.send(JSON.stringify(msg));
-                input.value = '';
-            }
-        }
+            const content = input.value;
+            let message = null;
 
-        function showTyping() {
-            const target = localStorage.getItem('chatTarget');
-            if (target) socket.send(JSON.stringify({ type: 'typing', to: target }));
+            if (fileToSend) {
+                const formData = new FormData();
+                formData.append('file', fileToSend.file);
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                message = { recipient_id: selectedChatUserId, message_type: fileToSend.type, content: data.url };
+                fileToSend = null;
+                document.getElementById('preview').style.display = 'none';
+            } else if (content) {
+                message = { recipient_id: selectedChatUserId, message_type: 'text', content };
+            }
+
+            if (!message || !selectedChatUserId || !socket) return;
+            socket.send(JSON.stringify(message));
+            document.getElementById('messages').innerHTML += `
+                <div class="message sent">${message.message_type === 'text' ? message.content : `<${message.message_type} src="${message.content}" controls></${message.message_type}>`}</div>`;
+            input.value = '';
         }
 
         async function apply(jobId) {
-            await fetch('/jobseeker/apply', {
+            const response = await fetch('/jobseeker/apply', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ job_id: jobId, user_id: userId })
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `user_id=${userIdRole}&job_id=${jobId}`
             });
-            loadJobs();
+            const data = await response.json();
+            alert(`Applied successfully! Cover Letter: ${data.cover_letter}`);
         }
 
-        function logout() {
-            localStorage.removeItem('userIdRole');
-            window.location.href = '/';
-        }
-
-        document.getElementById('cvForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
+        async function enhanceCV() {
+            const fileInput = document.getElementById('cvFile');
             const formData = new FormData();
-            formData.append('user_id', userId);
-            formData.append('cv', document.getElementById('cv').files[0]);
-            await fetch('/jobseeker/update_cv', { method: 'POST', body: formData });
-        });
+            formData.append('user_id', userIdRole);
+            formData.append('cv_file', fileInput.files[0]);
+            const response = await fetch('/jobseeker/update_cv', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await response.json();
+            const downloadLink = document.getElementById('downloadCV');
+            downloadLink.href = `data:application/pdf;base64,${data.enhanced_cv.split(': ')[1]}`;
+            downloadLink.download = 'enhanced_cv.pdf';
+            downloadLink.style.display = 'block';
+            alert('CV enhanced successfully!');
+        }
 
-        window.onload = () => showTab('gchat');
+        let localStream;
+        async function startInterview() {
+            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            document.getElementById('localVideo').srcObject = localStream;
+            const peerConnection = new RTCPeerConnection();
+            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+            peerConnection.ontrack = (event) => {
+                document.getElementById('remoteVideo').srcObject = event.streams[0];
+            };
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            socket.send(JSON.stringify({ type: 'webrtc_signal', to: selectedChatUserId, data: offer }));
+        }
+
+        function handleWebRTC(data) {
+            const peerConnection = new RTCPeerConnection();
+            peerConnection.setRemoteDescription(new RTCSessionDescription(data.data));
+        }
+
+        loadJobs();
     </script>
 </body>
 </html>

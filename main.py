@@ -1,6 +1,6 @@
-from fastapi import FastAPI, HTTPException, WebSocket, Form, Depends, Query
+from fastapi import FastAPI, HTTPException, WebSocket, Form, Depends, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey, text
 from sqlalchemy.ext.declarative import declarative_base
@@ -9,12 +9,15 @@ from pydantic import BaseModel
 from typing import Optional, Dict, List
 import datetime
 import os
-from passlib.context import CryptContext
-import uvicorn
-from dotenv import load_dotenv
+import base64
 import logging
 import asyncio
 import json
+from passlib.context import CryptContext
+import uvicorn
+from dotenv import load_dotenv
+from PyPDF2 import PdfReader
+from io import BytesIO
 
 load_dotenv()
 
@@ -52,11 +55,12 @@ class UserDB(Base):
     email = Column(String, unique=True, index=True)
     phone_number = Column(String, unique=True)
     password = Column(String)
-    role = Column(Integer)
+    role = Column(Integer)  # 0: Job Seeker, 1: Employer
     profile_pic = Column(String, nullable=True, default="/static/default_profile.jpg")
     about = Column(String, nullable=True, default="Hey there! I'm using G.Chat")
     last_seen = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.now(datetime.timezone.utc))
+    cv = Column(String, nullable=True)  # Base64 encoded PDF
 
 class JobDB(Base):
     __tablename__ = "jobs"
@@ -77,8 +81,8 @@ class MessageDB(Base):
     sender_id = Column(Integer, ForeignKey("users.id"))
     recipient_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     group_id = Column(Integer, ForeignKey("groups.id"), nullable=True)
-    message_type = Column(String)
-    content = Column(String)
+    message_type = Column(String)  # text, image, document, voice, audio, video
+    content = Column(String)  # URL or base64 for multimedia
     sent_at = Column(DateTime, default=datetime.datetime.now(datetime.timezone.utc))
     delivered_at = Column(DateTime, nullable=True)
     read_at = Column(DateTime, nullable=True)
@@ -114,6 +118,14 @@ class CallDB(Base):
     start_time = Column(DateTime, default=datetime.datetime.now(datetime.timezone.utc))
     end_time = Column(DateTime, nullable=True)
 
+class ApplicationDB(Base):
+    __tablename__ = "applications"
+    id = Column(Integer, primary_key=True, index=True)
+    job_id = Column(Integer, ForeignKey("jobs.id"))
+    user_id = Column(Integer, ForeignKey("users.id"))
+    cover_letter = Column(String, nullable=True)
+    applied_at = Column(DateTime, default=datetime.datetime.now(datetime.timezone.utc))
+
 # Update database schema on startup
 try:
     with engine.connect() as connection:
@@ -122,7 +134,17 @@ try:
             ADD COLUMN IF NOT EXISTS profile_pic VARCHAR DEFAULT '/static/default_profile.jpg',
             ADD COLUMN IF NOT EXISTS about VARCHAR DEFAULT 'Hey there! I''m using G.Chat',
             ADD COLUMN IF NOT EXISTS last_seen TIMESTAMP WITH TIME ZONE,
-            ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+            ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            ADD COLUMN IF NOT EXISTS cv TEXT;
+        """))
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS applications (
+                id SERIAL PRIMARY KEY,
+                job_id INTEGER REFERENCES jobs(id),
+                user_id INTEGER REFERENCES users(id),
+                cover_letter TEXT,
+                applied_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            );
         """))
         connection.commit()
     logger.info("Database schema updated successfully")
@@ -130,7 +152,6 @@ except Exception as e:
     logger.error(f"Failed to update database schema: {e}")
     raise
 
-# Create tables (for any new tables not yet existing)
 Base.metadata.create_all(bind=engine)
 
 class User(BaseModel):
@@ -145,6 +166,14 @@ class Message(BaseModel):
     group_id: Optional[int] = None
     message_type: str
     content: str
+
+class Job(BaseModel):
+    title: str
+    description: str
+    requirements: str
+    deadline: str
+    employer_email: str
+    company_name: Optional[str] = None
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -318,26 +347,32 @@ async def jobseeker_dashboard(user_id: str = Query(..., regex=r"^\d+:\d+$"), db:
     if not user or user.role != rid or rid != 0:
         raise HTTPException(status_code=403, detail="Not authorized")
     jobs = db.query(JobDB).filter(JobDB.status == "active").all()
-    return {"jobs": [{"id": j.id, "title": j.title, "description": j.description} for j in jobs]}
+    matched_jobs = [{"id": j.id, "title": j.title, "description": j.description, "match_score": min(100, len(user.cv or "") // 10)} for j in jobs]
+    return {"jobs": matched_jobs}
 
 @app.get("/chat_list")
 async def get_chat_list(user_id: str = Query(..., regex=r"^\d+:\d+$"), db: Session = Depends(get_db)):
-    uid, _ = map(int, user_id.split(":"))
-    messages = db.query(MessageDB).filter((MessageDB.sender_id == uid) | (MessageDB.recipient_id == uid)).all()
-    chat_dict = {}
-    for msg in messages:
-        other_id = msg.recipient_id if msg.sender_id == uid else msg.sender_id
-        if other_id and other_id not in chat_dict:
-            other_user = db.query(UserDB).filter(UserDB.id == other_id).first()
-            chat_dict[other_id] = {
-                "user_id": other_id,
-                "name": other_user.email.split("@")[0],
-                "profile_pic": other_user.profile_pic,
-                "last_message": msg.content,
-                "last_time": msg.sent_at.isoformat(),
-                "unread": 0 if msg.read_at else 1
-            }
-    return list(chat_dict.values())
+    try:
+        uid, _ = map(int, user_id.split(":"))
+        messages = db.query(MessageDB).filter((MessageDB.sender_id == uid) | (MessageDB.recipient_id == uid)).all()
+        chat_dict = {}
+        for msg in messages:
+            other_id = msg.recipient_id if msg.sender_id == uid else msg.sender_id
+            if other_id and other_id not in chat_dict:
+                other_user = db.query(UserDB).filter(UserDB.id == other_id).first()
+                if other_user:
+                    chat_dict[other_id] = {
+                        "user_id": other_id,
+                        "name": other_user.email.split("@")[0],
+                        "profile_pic": other_user.profile_pic,
+                        "last_message": msg.content,
+                        "last_time": msg.sent_at.isoformat(),
+                        "unread": 0 if msg.read_at else 1
+                    }
+        return list(chat_dict.values())
+    except Exception as e:
+        logger.error(f"Chat list error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load chat list")
 
 @app.get("/messages/{recipient_id}")
 async def get_messages(recipient_id: int, user_id: str = Query(..., regex=r"^\d+:\d+$"), db: Session = Depends(get_db)):
@@ -376,7 +411,57 @@ async def get_user(user_id: int, user_id_auth: str = Query(..., regex=r"^\d+:\d+
     user = db.query(UserDB).filter(UserDB.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return {"user_id": user.id, "name": user.email.split("@")[0], "profile_pic": user.profile_pic, "last_seen": user.last_seen.isoformat() if user.last_seen else None}
+    return {"user_id": user.id, "name": user.email.split("@")[0], "profile_pic": user.profile_pic, "last_seen": user.last_seen.isoformat() if user.last_seen else None, "cv": user.cv}
+
+@app.post("/jobseeker/update_cv")
+async def update_cv(user_id: str = Form(...), cv_file: UploadFile = File(...), db: Session = Depends(get_db)):
+    uid, _ = map(int, user_id.split(":"))
+    pdf_content = await cv_file.read()
+    pdf_base64 = base64.b64encode(pdf_content).decode("utf-8")
+    enhanced_cv = f"Enhanced CV for {uid}: {pdf_base64[:50]}..."
+    db.query(UserDB).filter(UserDB.id == uid).update({"cv": enhanced_cv})
+    db.commit()
+    return {"message": "CV updated", "enhanced_cv": enhanced_cv}
+
+@app.post("/jobseeker/apply")
+async def apply_job(user_id: str = Form(...), job_id: int = Form(...), db: Session = Depends(get_db)):
+    uid, _ = map(int, user_id.split(":"))
+    job = db.query(JobDB).filter(JobDB.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    user = db.query(UserDB).filter(UserDB.id == uid).first()
+    cover_letter = f"Dear {job.company_name or 'Employer'},\nI am excited to apply for {job.title}...\nRegards,\n{user.email.split('@')[0]}"
+    application = ApplicationDB(job_id=job_id, user_id=uid, cover_letter=cover_letter)
+    db.add(application)
+    db.commit()
+    return {"message": "Application submitted", "cover_letter": cover_letter}
+
+@app.post("/employer/post_job")
+async def post_job(job: Job, user_id: str = Form(...), db: Session = Depends(get_db)):
+    uid, _ = map(int, user_id.split(":"))
+    db_job = JobDB(
+        user_id=uid,
+        title=job.title,
+        description=job.description,
+        requirements=job.requirements,
+        deadline=job.deadline,
+        employer_email=job.employer_email,
+        company_name=job.company_name
+    )
+    db.add(db_job)
+    db.commit()
+    db.refresh(db_job)
+    job_seekers = db.query(UserDB).filter(UserDB.role == 0, UserDB.cv != None).all()
+    matches = [{"user_id": js.id, "name": js.email.split("@")[0], "cv": js.cv[:50] + "...", "match_score": min(100, len(js.cv or "") // 10)} for js in job_seekers]
+    return {"job_id": db_job.id, "matches": matches}
+
+@app.post("/upload")
+async def upload_file(file: UploadFile = File(...)):
+    content = await file.read()
+    # Mock upload to cloud storage; return base64 for now
+    file_base64 = base64.b64encode(content).decode("utf-8")
+    url = f"data:{file.content_type};base64,{file_base64}"
+    return {"url": url}
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
